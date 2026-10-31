@@ -1,0 +1,21 @@
+{
+  "name": "P2P USDT Escrow",
+  "short_name": "P2PEscrow",
+  "description": "Plataforma P2P Descentralizada para Intercambio de USDT con Custodia",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/12140/12140733.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/12140/12140733.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

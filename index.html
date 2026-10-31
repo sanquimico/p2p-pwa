@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P2P USDT Escrow - PWA</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="styles.css">
+    <meta name="theme-color" content="#0d1117">
+</head>
+<body>
+    <!-- Banner de Instalación PWA -->
+    <div id="pwa-banner" class="pwa-banner hidden">
+        <div class="banner-content">
+            <span>⚡ Instala esta PWA en tu teléfono para operar de forma rápida y segura.</span>
+            <button id="btn-install" class="btn-primary-sm">Instalar</button>
+            <button id="btn-close-banner" class="btn-icon">✕</button>
+        </div>
+    </div>
+
+    <header class="header">
+        <div class="logo">
+            <span class="logo-icon">🔒</span>
+            <h1>P2P<span>Escrow</span></h1>
+        </div>
+        <div class="wallet-status">
+            <span id="pwa-badge" class="badge">Web</span>
+            <button id="btn-connect" class="btn-wallet">Conectar Wallet</button>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- Selector de Modo -->
+        <section class="trade-tabs">
+            <button id="tab-buy" class="tab-btn active">Comprar USDT</button>
+            <button id="tab-sell" class="tab-btn">Vender USDT</button>
+        </section>
+
+        <!-- Filtros Rápidos -->
+        <section class="filters">
+            <select id="filter-network" class="input-select">
+                <option value="all">Todas las Redes</option>
+                <option value="polygon">Polygon (MATIC)</option>
+                <option value="bsc">BNB Chain (BEP20)</option>
+            </select>
+            <button id="btn-new-order" class="btn-secondary">+ Publicar Oferta</button>
+        </section>
+
+        <!-- Lista de Ofertas P2P -->
+        <section class="offers-list" id="offers-container">
+            <!-- Las ofertas se cargan dinámicamente desde app.js -->
+        </section>
+    </main>
+
+    <!-- Modal de Registro de Oferta Simulada -->
+    <div id="modal-order" class="modal hidden">
+        <div class="modal-content">
+            <h2>Publicar Oferta de Custodia</h2>
+            <form id="form-order">
+                <label>Tipo de Operación</label>
+                <select id="order-type" class="input-select">
+                    <option value="sell">Vender USDT (Recibir Pago Móvil)</option>
+                    <option value="buy">Comprar USDT (Enviar Pago Móvil)</option>
+                </select>
+
+                <label>Monto USDT</label>
+                <input type="number" id="order-amount" placeholder="Ej: 20" required class="input-text">
+
+                <label>Tasa sugerida (Bs / USDT)</label>
+                <input type="number" step="0.01" id="order-rate" placeholder="Ej: 45.50" required class="input-text">
+
+                <div class="modal-actions">
+                    <button type="button" id="btn-cancel-modal" class="btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn-primary">Publicar en Escrow</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        // Registro del Service Worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js')
+                .then(reg => console.log('Service Worker registrado con éxito', reg))
+                .catch(err => console.error('Error al registrar Service Worker', err));
+        }
+    </script>
+</body>
+</html>
