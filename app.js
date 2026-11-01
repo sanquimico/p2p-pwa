@@ -28,6 +28,38 @@ btnCloseBanner.addEventListener('click', () => {
     pwaBanner.classList.add('hidden');
 });
 
+// ==========================================
+// CONTROL DE VISTAS: ORDEN ACTIVA
+// ==========================================
+const offersContainer = document.getElementById('offers-container');
+const tradeTabsSection = document.querySelector('.trade-tabs');
+const filtersSection = document.querySelector('.filters');
+const orderViewSection = document.getElementById('order-view');
+const btnBack = document.getElementById('btn-back');
+
+function abrirOrdenActiva(datosOferta) {
+    if (tradeTabsSection) tradeTabsSection.classList.add('hidden');
+    if (filtersSection) filtersSection.classList.add('hidden');
+    if (offersContainer) offersContainer.classList.add('hidden');
+    
+    if (orderViewSection) orderViewSection.classList.remove('hidden');
+    
+    if (datosOferta) {
+        document.getElementById('order-fiat-amount').textContent = `${datosOferta.montoFiat} Bs`;
+        document.getElementById('order-crypto-amount').textContent = `${datosOferta.montoCrypto} USDT`;
+        document.getElementById('order-rate').textContent = `${datosOferta.tasa} Bs / USDT`;
+    }
+}
+
+if (btnBack) {
+    btnBack.addEventListener('click', () => {
+        if (orderViewSection) orderViewSection.classList.add('hidden');
+        if (tradeTabsSection) tradeTabsSection.classList.remove('hidden');
+        if (filtersSection) filtersSection.classList.remove('hidden');
+        if (offersContainer) offersContainer.classList.remove('hidden');
+    });
+}
+
 // Datos de prueba simulados para la interfaz
 const mockOffers = [
     { id: 1, user: "0x89A...41F", ops: "48 ops", rep: "99%", amount: "50 USDT", rate: "45.20 Bs", net: "Polygon" },
@@ -59,8 +91,22 @@ function renderOffers() {
     });
 }
 
+// Función initTrade actualizada para abrir la orden activa
 function initTrade(id) {
-    alert(`Iniciando solicitud de custodia Escrow para la oferta #${id}. Conecta tu wallet Web3 para continuar.`);
+    const oferta = mockOffers.find(o => o.id === id);
+    if (!oferta) return;
+
+    const montoCryptoNum = parseFloat(oferta.amount);
+    const tasaNum = parseFloat(oferta.rate);
+    const montoFiatTotal = (montoCryptoNum * tasaNum).toFixed(2);
+
+    const datosOferta = {
+        montoFiat: montoFiatTotal,
+        montoCrypto: montoCryptoNum.toFixed(2),
+        tasa: tasaNum.toFixed(2)
+    };
+
+    abrirOrdenActiva(datosOferta);
 }
 
 // Control del Modal para publicar oferta

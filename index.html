@@ -50,6 +50,58 @@
         <section class="offers-list" id="offers-container">
             <!-- Las ofertas se cargan dinámicamente desde app.js -->
         </section>
+
+        <!-- VISTA DE ORDEN ACTIVA (Oculta por defecto) -->
+        <div id="order-view" class="order-container hidden">
+            <div class="order-header">
+                <button id="btn-back" class="btn-secondary">← Volver</button>
+                <div class="timer-badge">
+                    <span id="timer-display">30:00</span>
+                </div>
+            </div>
+        
+            <div class="order-card">
+                <div class="order-status-banner">
+                    <span id="order-status-text">Esperando depósito / pago...</span>
+                </div>
+        
+                <h3>Detalles del Intercambio</h3>
+                <div class="order-info-row">
+                    <span>Monto a recibir:</span>
+                    <strong id="order-fiat-amount">0.00 Bs</strong>
+                </div>
+                <div class="order-info-row">
+                    <span>Monto Cripto (USDT):</span>
+                    <strong id="order-crypto-amount">0.00 USDT</strong>
+                </div>
+                <div class="order-info-row">
+                    <span>Tasa de cambio:</span>
+                    <strong id="order-rate">0.00 Bs / USDT</strong>
+                </div>
+        
+                <hr class="divider" />
+        
+                <h3>Datos de Pago Móvil del Vendedor</h3>
+                <div class="payment-details-box">
+                    <p><strong>Banco:</strong> <span id="pay-bank">Banesco (0134)</span></p>
+                    <p><strong>Cédula / RIF:</strong> <span id="pay-id">V-12345678</span></p>
+                    <p><strong>Teléfono:</strong> <span id="pay-phone">0412-1234567</span></p>
+                    <p><strong>Concepto sugerido:</strong> <span id="pay-ref">ORD-#1042</span></p>
+                </div>
+        
+                <div class="order-actions">
+                    <!-- Botón para el Comprador -->
+                    <button id="btn-mark-paid" class="btn-action btn-pay">
+                        Ya pagué (Notificar al Vendedor)
+                    </button>
+                
+                    <!-- Botón para abrir Disputa -->
+                    <button id="btn-dispute" class="btn-action btn-danger hidden">
+                        Abrir Disputa
+                    </button>
+                </div>
+            </div>
+        </div>
     </main>
 
     <!-- Modal de Registro de Oferta Simulada -->
