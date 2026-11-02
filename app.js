@@ -29,6 +29,79 @@ btnCloseBanner.addEventListener('click', () => {
 });
 
 // ==========================================
+// CONTROL DEL TEMPORIZADOR DE LA ORDEN
+// ==========================================
+let orderTimerInterval = null;
+
+function startOrderTimer(durationInSeconds = 1800) {
+    if (orderTimerInterval) {
+        clearInterval(orderTimerInterval);
+    }
+
+    let timer = durationInSeconds;
+    const timerDisplay = document.getElementById('timer-display');
+    if (!timerDisplay) return;
+
+    updateTimerUI(timer, timerDisplay);
+
+    orderTimerInterval = setInterval(() => {
+        timer--;
+
+        if (timer >= 0) {
+            updateTimerUI(timer, timerDisplay);
+        } else {
+            clearInterval(orderTimerInterval);
+            orderTimerInterval = null;
+            handleOrderTimeout();
+        }
+    }, 1000);
+}
+
+function updateTimerUI(seconds, element) {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+
+    const formattedMinutes = String(minutes).padStart(2, '0');
+    const formattedSeconds = String(remainingSeconds).padStart(2, '0');
+
+    element.textContent = `${formattedMinutes}:${formattedSeconds}`;
+}
+
+function handleOrderTimeout() {
+    const statusText = document.getElementById('order-status-text');
+    const statusBanner = document.querySelector('.order-status-banner');
+    const btnMarkPaid = document.getElementById('btn-mark-paid');
+    const btnDispute = document.getElementById('btn-dispute');
+
+    if (statusText) {
+        statusText.textContent = 'Orden expirada por tiempo agotado';
+    }
+    
+    if (statusBanner) {
+        statusBanner.style.backgroundColor = '#dc3545';
+        statusBanner.style.color = '#fff';
+    }
+
+    if (btnMarkPaid) {
+        btnMarkPaid.disabled = true;
+        btnMarkPaid.style.opacity = '0.5';
+    }
+
+    if (btnDispute) {
+        btnDispute.classList.remove('hidden');
+    }
+
+    alert('El tiempo límite de 30 minutos para realizar el pago ha expirado.');
+}
+
+function stopOrderTimer() {
+    if (orderTimerInterval) {
+        clearInterval(orderTimerInterval);
+        orderTimerInterval = null;
+    }
+}
+
+// ==========================================
 // CONTROL DE VISTAS: ORDEN ACTIVA
 // ==========================================
 const offersContainer = document.getElementById('offers-container');
@@ -49,10 +122,14 @@ function abrirOrdenActiva(datosOferta) {
         document.getElementById('order-crypto-amount').textContent = `${datosOferta.montoCrypto} USDT`;
         document.getElementById('order-rate').textContent = `${datosOferta.tasa} Bs / USDT`;
     }
+
+    // Inicia la cuenta regresiva al abrir la orden (1800s = 30 min)
+    startOrderTimer(1800);
 }
 
 if (btnBack) {
     btnBack.addEventListener('click', () => {
+        stopOrderTimer(); // Detiene el temporizador al salir de la orden
         if (orderViewSection) orderViewSection.classList.add('hidden');
         if (tradeTabsSection) tradeTabsSection.classList.remove('hidden');
         if (filtersSection) filtersSection.classList.remove('hidden');
