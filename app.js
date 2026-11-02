@@ -270,7 +270,6 @@ function mostrarAvisoActualizacion(reg) {
 // ==========================================
 // CONTROL DEL TEMPORIZADOR Y ACCIONES DE ORDEN
 // ==========================================
-let orderTimerInterval = null;
 
 function startOrderTimer(durationInSeconds = 1800) {
     if (orderTimerInterval) {
