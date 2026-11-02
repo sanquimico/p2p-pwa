@@ -213,3 +213,56 @@ document.getElementById('form-order').addEventListener('submit', (e) => {
 
 // Cargar al inicio
 document.addEventListener('DOMContentLoaded', renderOffers);
+
+// ==========================================
+// GESTIÓN DE ACTUALIZACIONES PWA (NO INTRUSIVA)
+// ==========================================
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').then((reg) => {
+        // Si ya hay un Service Worker esperando al cargar
+        if (reg.waiting) {
+            mostrarAvisoActualizacion(reg);
+            return;
+        }
+
+        // Si se detecta un nuevo Service Worker instalándose
+        reg.addEventListener('updatefound', () => {
+            const newWorker = reg.installing;
+            newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    mostrarAvisoActualizacion(reg);
+                }
+            });
+        });
+    });
+
+    // Recarga automática de la página solo cuando el nuevo SW toma el control tras la orden del usuario
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (refreshing) return;
+        refreshing = true;
+        window.location.reload();
+    });
+}
+
+// Función que dibuja el banner flotante en la pantalla
+function mostrarAvisoActualizacion(reg) {
+    if (document.getElementById('update-toast')) return;
+
+    const toast = document.createElement('div');
+    toast.id = 'update-toast';
+    toast.innerHTML = `
+        <div style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1f2937; color: #fff; padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); display: flex; align-items: center; gap: 15px; z-index: 9999; border: 1px solid #374151; font-family: sans-serif; font-size: 14px;">
+            <span>¡Nueva versión de P2P Escrow disponible!</span>
+            <button id="btn-update-app" style="background: #10b981; color: white; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-weight: bold;">Actualizar</button>
+        </div>
+    `;
+    document.body.appendChild(toast);
+
+    document.getElementById('btn-update-app').addEventListener('click', () => {
+        if (reg.waiting) {
+            // Envía la señal al Service Worker para que aplique la actualización
+            reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        }
+    });
+}
