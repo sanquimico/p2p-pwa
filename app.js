@@ -266,3 +266,144 @@ function mostrarAvisoActualizacion(reg) {
         }
     });
 }
+
+// ==========================================
+// CONTROL DEL TEMPORIZADOR Y ACCIONES DE ORDEN
+// ==========================================
+let orderTimerInterval = null;
+
+function startOrderTimer(durationInSeconds = 1800) {
+    if (orderTimerInterval) {
+        clearInterval(orderTimerInterval);
+    }
+
+    let timer = durationInSeconds;
+    const timerDisplay = document.getElementById('timer-display');
+    if (!timerDisplay) return;
+
+    updateTimerUI(timer, timerDisplay);
+
+    orderTimerInterval = setInterval(() => {
+        timer--;
+
+        if (timer >= 0) {
+            updateTimerUI(timer, timerDisplay);
+        } else {
+            clearInterval(orderTimerInterval);
+            orderTimerInterval = null;
+            handleOrderTimeout();
+        }
+    }, 1000);
+}
+
+function updateTimerUI(seconds, element) {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+
+    const formattedMinutes = String(minutes).padStart(2, '0');
+    const formattedSeconds = String(remainingSeconds).padStart(2, '0');
+
+    element.textContent = `${formattedMinutes}:${formattedSeconds}`;
+}
+
+function handleOrderTimeout() {
+    const statusText = document.getElementById('order-status-text');
+    const statusBanner = document.querySelector('.order-status-banner');
+    const btnMarkPaid = document.getElementById('btn-mark-paid');
+    const btnDispute = document.getElementById('btn-dispute');
+
+    if (statusText) {
+        statusText.textContent = 'Orden expirada por tiempo agotado';
+    }
+    
+    if (statusBanner) {
+        statusBanner.style.backgroundColor = '#dc3545';
+        statusBanner.style.color = '#fff';
+    }
+
+    if (btnMarkPaid) {
+        btnMarkPaid.disabled = true;
+        btnMarkPaid.style.opacity = '0.5';
+    }
+
+    if (btnDispute) {
+        btnDispute.classList.remove('hidden');
+    }
+
+    alert('El tiempo límite de 30 minutos para realizar el pago ha expirado.');
+}
+
+function stopOrderTimer() {
+    if (orderTimerInterval) {
+        clearInterval(orderTimerInterval);
+        orderTimerInterval = null;
+    }
+}
+
+// Acción: Marcar como pagado
+function marcarComoPagado() {
+    stopOrderTimer();
+
+    const statusText = document.getElementById('order-status-text');
+    const statusBanner = document.querySelector('.order-status-banner');
+    const btnMarkPaid = document.getElementById('btn-mark-paid');
+    const timerDisplay = document.getElementById('timer-display');
+
+    if (statusText) {
+        statusText.textContent = 'Pago realizado. Esperando confirmación del vendedor...';
+    }
+
+    if (statusBanner) {
+        statusBanner.style.backgroundColor = '#d97706'; // Ámbar / Alerta moderada
+        statusBanner.style.color = '#fff';
+    }
+
+    if (btnMarkPaid) {
+        btnMarkPaid.disabled = true;
+        btnMarkPaid.style.opacity = '0.5';
+        btnMarkPaid.textContent = 'Pago Notificado';
+    }
+
+    if (timerDisplay) {
+        timerDisplay.textContent = 'PAGADO';
+    }
+
+    alert('Has notificado el pago. El vendedor verificará sus cuentas para liberar los USDT.');
+}
+
+// Acción: Abrir Disputa
+function abrirDisputaOrden() {
+    stopOrderTimer();
+
+    const statusText = document.getElementById('order-status-text');
+    const statusBanner = document.querySelector('.order-status-banner');
+    const btnDispute = document.getElementById('btn-dispute');
+
+    if (statusText) {
+        statusText.textContent = 'Disputa abierta. Soporte intervendrá en la orden.';
+    }
+
+    if (statusBanner) {
+        statusBanner.style.backgroundColor = '#dc3545'; // Rojo de alerta
+        statusBanner.style.color = '#fff';
+    }
+
+    if (btnDispute) {
+        btnDispute.disabled = true;
+        btnDispute.style.opacity = '0.5';
+    }
+
+    alert('Se ha abierto una disputa. Un moderador revisará el caso.');
+}
+
+// Vincular los eventos de los botones de la orden
+const btnMarkPaid = document.getElementById('btn-mark-paid');
+const btnDispute = document.getElementById('btn-dispute');
+
+if (btnMarkPaid) {
+    btnMarkPaid.addEventListener('click', marcarComoPagado);
+}
+
+if (btnDispute) {
+    btnDispute.addEventListener('click', abrirDisputaOrden);
+}
