@@ -208,7 +208,7 @@ document.getElementById('form-order').addEventListener('submit', (e) => {
         rep: "100%",
         amount: `${amountInput} USDT`,
         rate: `${rateInput} Bs`,
-        net: networkInput // Usamos la red seleccionada dinámicamente
+        net: networkInput // Usamos la red seleccionada dinámicamente del select
     });
     
     renderOffers();
