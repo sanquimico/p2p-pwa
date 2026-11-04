@@ -91,6 +91,7 @@ function handleOrderTimeout() {
         btnDispute.classList.remove('hidden');
     }
 
+    registrarEnHistorial("Expirada");
     alert('El tiempo límite de 30 minutos para realizar el pago ha expirado.');
 }
 
@@ -102,13 +103,16 @@ function stopOrderTimer() {
 }
 
 // ==========================================
-// CONTROL DE VISTAS: ORDEN ACTIVA
+// CONTROL DE VISTAS: ORDEN ACTIVA & HISTORIAL
 // ==========================================
 const offersContainer = document.getElementById('offers-container');
 const tradeTabsSection = document.querySelector('.trade-tabs');
 const filtersSection = document.querySelector('.filters');
 const orderViewSection = document.getElementById('order-view');
 const btnBack = document.getElementById('btn-back');
+
+let currentActiveOrder = null;
+const orderHistory = [];
 
 function abrirOrdenActiva(datosOferta) {
     if (tradeTabsSection) tradeTabsSection.classList.add('hidden');
@@ -123,13 +127,12 @@ function abrirOrdenActiva(datosOferta) {
         document.getElementById('order-rate').textContent = `${datosOferta.tasa} Bs / USDT`;
     }
 
-    // Inicia la cuenta regresiva al abrir la orden (1800s = 30 min)
     startOrderTimer(1800);
 }
 
 if (btnBack) {
     btnBack.addEventListener('click', () => {
-        stopOrderTimer(); // Detiene el temporizador al salir de la orden
+        stopOrderTimer();
         if (orderViewSection) orderViewSection.classList.add('hidden');
         if (tradeTabsSection) tradeTabsSection.classList.remove('hidden');
         if (filtersSection) filtersSection.classList.remove('hidden');
@@ -168,12 +171,61 @@ function renderOffers() {
     });
 }
 
-// Función initTrade robusta para limpiar textos y calcular sin errores (NaN)
+function renderHistory() {
+    const container = document.getElementById('history-container');
+    if (!container) return;
+
+    if (orderHistory.length === 0) {
+        container.innerHTML = `<p style="color: #8b949e; font-size: 0.9rem;">No hay transacciones registradas en esta sesión.</p>`;
+        return;
+    }
+
+    container.innerHTML = "";
+    orderHistory.forEach(item => {
+        const card = document.createElement('div');
+        card.className = "card-offer";
+        card.innerHTML = `
+            <div class="card-header">
+                <div class="user-info">📦 Orden #${item.id} <span class="reputation" style="color: ${item.color}">${item.status}</span></div>
+                <span class="badge">${item.net}</span>
+            </div>
+            <div class="card-body">
+                <div>
+                    <div class="price">${item.rate} <span>/ USDT</span></div>
+                    <div class="limits">Total: ${item.montoFiat} Bs (${item.montoCrypto} USDT)</div>
+                </div>
+                <span style="font-size: 0.85rem; color: #8b949e;">${item.fecha}</span>
+            </div>
+        `;
+        container.appendChild(card);
+    });
+}
+
+function registrarEnHistorial(estado) {
+    if (!currentActiveOrder) return;
+
+    let colorStatus = "#10b981"; // Verde por defecto
+    if (estado === "Expirada" || estado === "Disputa") colorStatus = "#dc3545"; // Rojo
+
+    orderHistory.unshift({
+        id: currentActiveOrder.id,
+        user: currentActiveOrder.user,
+        net: currentActiveOrder.net || "Polygon",
+        montoCrypto: currentActiveOrder.montoCrypto,
+        montoFiat: currentActiveOrder.montoFiat,
+        rate: currentActiveOrder.tasa,
+        status: estado,
+        color: colorStatus,
+        fecha: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    });
+
+    renderHistory();
+}
+
 function initTrade(id) {
     const oferta = mockOffers.find(o => o.id === id);
     if (!oferta) return;
 
-    // Extraemos limpiamente solo los números ignorando "USDT", "Bs", etc.
     const montoCryptoNum = parseFloat(oferta.amount.replace(/[^0-9.]/g, ''));
     const tasaNum = parseFloat(oferta.rate.replace(/[^0-9.]/g, ''));
     
@@ -187,10 +239,20 @@ function initTrade(id) {
         tasa: !isNaN(tasaNum) ? tasaNum.toFixed(2) : "0.00"
     };
 
+    // Guardamos la orden activa actual para el historial
+    currentActiveOrder = {
+        id: oferta.id,
+        user: oferta.user,
+        net: oferta.net,
+        montoCrypto: datosOferta.montoCrypto,
+        montoFiat: datosOferta.montoFiat,
+        tasa: datosOferta.tasa
+    };
+
     abrirOrdenActiva(datosOferta);
 }
 
-// Control del Modal para publicar oferta (leyendo los inputs exclusivos del modal)
+// Control del Modal para publicar oferta
 const modal = document.getElementById('modal-order');
 document.getElementById('btn-new-order').addEventListener('click', () => modal.classList.remove('hidden'));
 document.getElementById('btn-cancel-modal').addEventListener('click', () => modal.classList.add('hidden'));
@@ -199,7 +261,7 @@ document.getElementById('form-order').addEventListener('submit', (e) => {
     e.preventDefault();
     const amountInput = document.getElementById('modal-order-amount').value;
     const rateInput = document.getElementById('modal-order-rate').value;
-    const networkInput = document.getElementById('modal-order-network').value; // Capturamos la red elegida
+    const networkInput = document.getElementById('modal-order-network').value;
     
     mockOffers.unshift({
         id: Date.now(),
@@ -208,7 +270,7 @@ document.getElementById('form-order').addEventListener('submit', (e) => {
         rep: "100%",
         amount: `${amountInput} USDT`,
         rate: `${rateInput} Bs`,
-        net: networkInput // Usamos la red seleccionada dinámicamente del select
+        net: networkInput
     });
     
     renderOffers();
@@ -216,11 +278,10 @@ document.getElementById('form-order').addEventListener('submit', (e) => {
     e.target.reset();
 });
 
-// Cargar al inicio
 document.addEventListener('DOMContentLoaded', renderOffers);
 
 // ==========================================
-// GESTIÓN DE ACTUALIZACIONES PWA (NO INTRUSIVA)
+// GESTIÓN DE ACTUALIZACIONES PWA
 // ==========================================
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').then((reg) => {
@@ -271,112 +332,80 @@ function mostrarAvisoActualizacion(reg) {
 // ACCIONES DE ORDEN (COMPRADOR Y VENDEDOR)
 // ==========================================
 
-// Acción: Marcar como pagado (Comprador)
 function marcarComoPagado() {
     stopOrderTimer();
-
     const statusText = document.getElementById('order-status-text');
     const statusBanner = document.querySelector('.order-status-banner');
     const btnMarkPaid = document.getElementById('btn-mark-paid');
     const timerDisplay = document.getElementById('timer-display');
 
-    if (statusText) {
-        statusText.textContent = 'Pago realizado. Esperando confirmación del vendedor...';
-    }
-
+    if (statusText) statusText.textContent = 'Pago realizado. Esperando confirmación del vendedor...';
     if (statusBanner) {
-        statusBanner.style.backgroundColor = '#d97706'; // Ámbar / Alerta moderada
+        statusBanner.style.backgroundColor = '#d97706';
         statusBanner.style.color = '#fff';
     }
-
     if (btnMarkPaid) {
         btnMarkPaid.disabled = true;
         btnMarkPaid.style.opacity = '0.5';
         btnMarkPaid.textContent = 'Pago Notificado';
     }
-
-    if (timerDisplay) {
-        timerDisplay.textContent = 'PAGADO';
-    }
+    if (timerDisplay) timerDisplay.textContent = 'PAGADO';
 
     alert('Has notificado el pago. El vendedor verificará sus cuentas para liberar los USDT.');
 }
 
-// Acción: Liberar Fondos (Vendedor)
 function liberarFondos() {
     stopOrderTimer();
-
     const statusText = document.getElementById('order-status-text');
     const statusBanner = document.querySelector('.order-status-banner');
     const btnMarkPaid = document.getElementById('btn-mark-paid');
     const btnRelease = document.getElementById('btn-release-funds');
     const timerDisplay = document.getElementById('timer-display');
 
-    if (statusText) {
-        statusText.textContent = '¡Orden completada con éxito! USDT liberados al comprador.';
-    }
-
+    if (statusText) statusText.textContent = '¡Orden completada con éxito! USDT liberados al comprador.';
     if (statusBanner) {
-        statusBanner.style.backgroundColor = '#10b981'; // Verde éxito
+        statusBanner.style.backgroundColor = '#10b981';
         statusBanner.style.color = '#fff';
     }
-
     if (btnMarkPaid) {
         btnMarkPaid.disabled = true;
         btnMarkPaid.style.opacity = '0.5';
     }
-
     if (btnRelease) {
         btnRelease.disabled = true;
         btnRelease.style.opacity = '0.5';
         btnRelease.textContent = 'USDT Liberados';
     }
+    if (timerDisplay) timerDisplay.textContent = 'COMPLETADO';
 
-    if (timerDisplay) {
-        timerDisplay.textContent = 'COMPLETADO';
-    }
-
+    registrarEnHistorial("Completado");
     alert('¡Fondos liberados exitosamente! La orden ha finalizado.');
 }
 
-// Acción: Abrir Disputa
 function abrirDisputaOrden() {
     stopOrderTimer();
-
     const statusText = document.getElementById('order-status-text');
     const statusBanner = document.querySelector('.order-status-banner');
     const btnDispute = document.getElementById('btn-dispute');
 
-    if (statusText) {
-        statusText.textContent = 'Disputa abierta. Soporte intervendrá en la orden.';
-    }
-
+    if (statusText) statusText.textContent = 'Disputa abierta. Soporte intervendrá en la orden.';
     if (statusBanner) {
-        statusBanner.style.backgroundColor = '#dc3545'; // Rojo de alerta
+        statusBanner.style.backgroundColor = '#dc3545';
         statusBanner.style.color = '#fff';
     }
-
     if (btnDispute) {
         btnDispute.disabled = true;
         btnDispute.style.opacity = '0.5';
     }
 
+    registrarEnHistorial("Disputa");
     alert('Se ha abierto una disputa. Un moderador revisará el caso.');
 }
 
-// Vincular los eventos de los botones de la orden
 const btnMarkPaid = document.getElementById('btn-mark-paid');
 const btnReleaseFunds = document.getElementById('btn-release-funds');
 const btnDispute = document.getElementById('btn-dispute');
 
-if (btnMarkPaid) {
-    btnMarkPaid.addEventListener('click', marcarComoPagado);
-}
-
-if (btnReleaseFunds) {
-    btnReleaseFunds.addEventListener('click', liberarFondos);
-}
-
-if (btnDispute) {
-    btnDispute.addEventListener('click', abrirDisputaOrden);
-}
+if (btnMarkPaid) btnMarkPaid.addEventListener('click', marcarComoPagado);
+if (btnReleaseFunds) btnReleaseFunds.addEventListener('click', liberarFondos);
+if (btnDispute) btnDispute.addEventListener('click', abrirDisputaOrden);
