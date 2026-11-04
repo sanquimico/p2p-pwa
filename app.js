@@ -199,6 +199,7 @@ document.getElementById('form-order').addEventListener('submit', (e) => {
     e.preventDefault();
     const amountInput = document.getElementById('modal-order-amount').value;
     const rateInput = document.getElementById('modal-order-rate').value;
+    const networkInput = document.getElementById('modal-order-network').value; // Capturamos la red elegida
     
     mockOffers.unshift({
         id: Date.now(),
@@ -207,7 +208,7 @@ document.getElementById('form-order').addEventListener('submit', (e) => {
         rep: "100%",
         amount: `${amountInput} USDT`,
         rate: `${rateInput} Bs`,
-        net: "Polygon"
+        net: networkInput // Usamos la red seleccionada dinámicamente
     });
     
     renderOffers();
