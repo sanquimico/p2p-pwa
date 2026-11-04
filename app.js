@@ -33,7 +33,8 @@ btnCloseBanner.addEventListener('click', () => {
 // ==========================================
 let orderTimerInterval = null;
 
-function startOrderTimer(durationInSeconds = 1800) {
+// 60 segundos para pruebas rápidas (1800s = 30 min original guardado para producción)
+function startOrderTimer(durationInSeconds = 60) {
     if (orderTimerInterval) {
         clearInterval(orderTimerInterval);
     }
@@ -92,7 +93,7 @@ function handleOrderTimeout() {
     }
 
     registrarEnHistorial("Expirada");
-    alert('El tiempo límite de 30 minutos para realizar el pago ha expirado.');
+    alert('El tiempo límite para realizar el pago ha expirado.');
 }
 
 function stopOrderTimer() {
@@ -127,7 +128,8 @@ function abrirOrdenActiva(datosOferta) {
         document.getElementById('order-rate').textContent = `${datosOferta.tasa} Bs / USDT`;
     }
 
-    startOrderTimer(1800);
+    // Inicia con 60s (prueba rápida) -> Usar 1800 para los 30 min reales en producción
+    startOrderTimer(60); 
 }
 
 if (btnBack) {
@@ -140,17 +142,19 @@ if (btnBack) {
     });
 }
 
-// Datos de prueba simulados para la interfaz
-const mockOffers = [
-    { id: 1, user: "0x89A...41F", ops: "48 ops", rep: "99%", amount: "50 USDT", rate: "45.20 Bs", net: "Polygon" },
-    { id: 2, user: "0x32B...90E", ops: "12 ops", rep: "100%", amount: "20 USDT", rate: "45.10 Bs", net: "BSC" },
-    { id: 3, user: "0x77C...11A", ops: "105 ops", rep: "98%", amount: "100 USDT", rate: "45.35 Bs", net: "Polygon" }
-];
+// Ofertas vacías para iniciar limpio (puedes agregar datos de prueba aquí si lo requieres de nuevo)
+const mockOffers = [];
 
 function renderOffers() {
     const container = document.getElementById('offers-container');
+    if (!container) return;
     container.innerHTML = "";
     
+    if (mockOffers.length === 0) {
+        container.innerHTML = `<p style="color: #8b949e; font-size: 0.9rem; text-align: center; padding: 20px;">No hay ofertas publicadas en este momento. Publica una usando el botón superior.</p>`;
+        return;
+    }
+
     mockOffers.forEach(o => {
         const card = document.createElement('div');
         card.className = "card-offer";
@@ -239,7 +243,6 @@ function initTrade(id) {
         tasa: !isNaN(tasaNum) ? tasaNum.toFixed(2) : "0.00"
     };
 
-    // Guardamos la orden activa actual para el historial
     currentActiveOrder = {
         id: oferta.id,
         user: oferta.user,
@@ -254,31 +257,69 @@ function initTrade(id) {
 
 // Control del Modal para publicar oferta
 const modal = document.getElementById('modal-order');
-document.getElementById('btn-new-order').addEventListener('click', () => modal.classList.remove('hidden'));
-document.getElementById('btn-cancel-modal').addEventListener('click', () => modal.classList.add('hidden'));
+const btnNewOrder = document.getElementById('btn-new-order');
+const btnCancelModal = document.getElementById('btn-cancel-modal');
 
-document.getElementById('form-order').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const amountInput = document.getElementById('modal-order-amount').value;
-    const rateInput = document.getElementById('modal-order-rate').value;
-    const networkInput = document.getElementById('modal-order-network').value;
-    
-    mockOffers.unshift({
-        id: Date.now(),
-        user: "0xMi...Wallet",
-        ops: "0 ops",
-        rep: "100%",
-        amount: `${amountInput} USDT`,
-        rate: `${rateInput} Bs`,
-        net: networkInput
+if (btnNewOrder && modal) {
+    btnNewOrder.addEventListener('click', () => modal.classList.remove('hidden'));
+}
+if (btnCancelModal && modal) {
+    btnCancelModal.addEventListener('click', () => modal.classList.add('hidden'));
+}
+
+const formOrder = document.getElementById('form-order');
+if (formOrder) {
+    formOrder.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const amountInput = document.getElementById('modal-order-amount').value;
+        const rateInput = document.getElementById('modal-order-rate').value;
+        const networkInput = document.getElementById('modal-order-network').value;
+        
+        mockOffers.unshift({
+            id: Date.now(),
+            user: "0xMi...Wallet",
+            ops: "0 ops",
+            rep: "100%",
+            amount: `${amountInput} USDT`,
+            rate: `${rateInput} Bs`,
+            net: networkInput
+        });
+        
+        renderOffers();
+        modal.classList.add('hidden');
+        e.target.reset();
     });
-    
-    renderOffers();
-    modal.classList.add('hidden');
-    e.target.reset();
-});
+}
 
 document.addEventListener('DOMContentLoaded', renderOffers);
+
+// ==========================================
+// CONEXIÓN REAL DE WALLET (Web3 / MetaMask / Exodus)
+// ==========================================
+const btnConnect = document.getElementById('btn-connect');
+
+if (btnConnect) {
+    btnConnect.addEventListener('click', async () => {
+        if (typeof window.ethereum !== 'undefined') {
+            try {
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                const account = accounts[0];
+                const shortAccount = `${account.substring(0, 6)}...${account.substring(account.length - 4)}`;
+                
+                btnConnect.textContent = shortAccount;
+                btnConnect.style.backgroundColor = '#10b981';
+                btnConnect.style.borderColor = '#10b981';
+                
+                console.log("Wallet conectada con éxito:", account);
+            } catch (error) {
+                console.error("El usuario rechazó la conexión de la wallet:", error);
+                alert("No se pudo conectar la wallet. Asegúrate de aprobar la solicitud.");
+            }
+        } else {
+            alert("No se detectó ninguna wallet Web3 (como MetaMask o Exodus). Por favor instala una para conectar.");
+        }
+    });
+}
 
 // ==========================================
 // GESTIÓN DE ACTUALIZACIONES PWA
@@ -409,3 +450,23 @@ const btnDispute = document.getElementById('btn-dispute');
 if (btnMarkPaid) btnMarkPaid.addEventListener('click', marcarComoPagado);
 if (btnReleaseFunds) btnReleaseFunds.addEventListener('click', liberarFondos);
 if (btnDispute) btnDispute.addEventListener('click', abrirDisputaOrden);
+
+// ==========================================
+// CONTROL DE PESTAÑAS (Comprar / Vender USDT)
+// ==========================================
+const tabBuy = document.getElementById('tab-buy');
+const tabSell = document.getElementById('tab-sell');
+
+if (tabBuy && tabSell) {
+    tabBuy.addEventListener('click', () => {
+        tabBuy.classList.add('active');
+        tabSell.classList.remove('active');
+        console.log("Cambiado a vista: Comprar USDT");
+    });
+
+    tabSell.addEventListener('click', () => {
+        tabSell.classList.add('active');
+        tabBuy.classList.remove('active');
+        console.log("Cambiado a vista: Vender USDT");
+    });
+}
