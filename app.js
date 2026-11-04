@@ -168,41 +168,45 @@ function renderOffers() {
     });
 }
 
-// Función initTrade actualizada para abrir la orden activa
+// Función initTrade robusta para limpiar textos y calcular sin errores (NaN)
 function initTrade(id) {
     const oferta = mockOffers.find(o => o.id === id);
     if (!oferta) return;
 
-    const montoCryptoNum = parseFloat(oferta.amount);
-    const tasaNum = parseFloat(oferta.rate);
-    const montoFiatTotal = (montoCryptoNum * tasaNum).toFixed(2);
+    // Extraemos limpiamente solo los números ignorando "USDT", "Bs", etc.
+    const montoCryptoNum = parseFloat(oferta.amount.replace(/[^0-9.]/g, ''));
+    const tasaNum = parseFloat(oferta.rate.replace(/[^0-9.]/g, ''));
+    
+    const montoFiatTotal = (!isNaN(montoCryptoNum) && !isNaN(tasaNum)) 
+        ? (montoCryptoNum * tasaNum).toFixed(2) 
+        : "0.00";
 
     const datosOferta = {
         montoFiat: montoFiatTotal,
-        montoCrypto: montoCryptoNum.toFixed(2),
-        tasa: tasaNum.toFixed(2)
+        montoCrypto: !isNaN(montoCryptoNum) ? montoCryptoNum.toFixed(2) : "0.00",
+        tasa: !isNaN(tasaNum) ? tasaNum.toFixed(2) : "0.00"
     };
 
     abrirOrdenActiva(datosOferta);
 }
 
-// Control del Modal para publicar oferta
+// Control del Modal para publicar oferta (leyendo los inputs exclusivos del modal)
 const modal = document.getElementById('modal-order');
 document.getElementById('btn-new-order').addEventListener('click', () => modal.classList.remove('hidden'));
 document.getElementById('btn-cancel-modal').addEventListener('click', () => modal.classList.add('hidden'));
 
 document.getElementById('form-order').addEventListener('submit', (e) => {
     e.preventDefault();
-    const amount = document.getElementById('modal-order-amount').value;
-    const rate = document.getElementById('modal-order-rate').value;
+    const amountInput = document.getElementById('modal-order-amount').value;
+    const rateInput = document.getElementById('modal-order-rate').value;
     
     mockOffers.unshift({
         id: Date.now(),
         user: "0xMi...Wallet",
         ops: "0 ops",
         rep: "100%",
-        amount: `${amount} USDT`,
-        rate: `${rate} Bs`,
+        amount: `${amountInput} USDT`,
+        rate: `${rateInput} Bs`,
         net: "Polygon"
     });
     
