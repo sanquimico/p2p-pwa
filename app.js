@@ -89,7 +89,6 @@ function handleOrderTimeout() {
         btnMarkPaid.style.opacity = '0.5';
     }
 
-    // Bloquear también el botón de liberar fondos al expirar
     if (btnRelease) {
         btnRelease.disabled = true;
         btnRelease.style.opacity = '0.5';
@@ -129,6 +128,35 @@ function abrirOrdenActiva(datosOferta) {
     
     if (orderViewSection) orderViewSection.classList.remove('hidden');
     
+    // Resetear estados visuales de la orden para que nazca limpia
+    const statusText = document.getElementById('order-status-text');
+    const statusBanner = document.querySelector('.order-status-banner');
+    const btnMarkPaid = document.getElementById('btn-mark-paid');
+    const btnRelease = document.getElementById('btn-release-funds');
+    const btnDispute = document.getElementById('btn-dispute');
+    const timerDisplay = document.getElementById('timer-display');
+
+    if (statusText) statusText.textContent = 'Esperando depósito / pago...';
+    if (statusBanner) {
+        statusBanner.style.backgroundColor = '#2563eb';
+        statusBanner.style.color = '#fff';
+    }
+    if (btnMarkPaid) {
+        btnMarkPaid.disabled = false;
+        btnMarkPaid.style.opacity = '1';
+        btnMarkPaid.textContent = 'Ya pagué (Notificar al Vendedor)';
+    }
+    if (btnRelease) {
+        btnRelease.disabled = false;
+        btnRelease.style.opacity = '1';
+        btnRelease.textContent = 'Liberar USDT (Confirmar Pago)';
+    }
+    if (btnDispute) {
+        btnDispute.classList.add('hidden');
+        btnDispute.disabled = false;
+        btnDispute.style.opacity = '1';
+    }
+
     if (datosOferta) {
         document.getElementById('order-fiat-amount').textContent = `${datosOferta.montoFiat} Bs`;
         document.getElementById('order-crypto-amount').textContent = `${datosOferta.montoCrypto} USDT`;
