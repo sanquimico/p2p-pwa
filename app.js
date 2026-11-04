@@ -33,7 +33,7 @@ btnCloseBanner.addEventListener('click', () => {
 // ==========================================
 let orderTimerInterval = null;
 
-// 60 segundos para pruebas rápidas (1800s = 30 min original guardado para producción)
+// 60 segundos para pruebas rápidas (1800s = 30 min original para producción)
 function startOrderTimer(durationInSeconds = 60) {
     if (orderTimerInterval) {
         clearInterval(orderTimerInterval);
@@ -72,6 +72,7 @@ function handleOrderTimeout() {
     const statusText = document.getElementById('order-status-text');
     const statusBanner = document.querySelector('.order-status-banner');
     const btnMarkPaid = document.getElementById('btn-mark-paid');
+    const btnRelease = document.getElementById('btn-release-funds');
     const btnDispute = document.getElementById('btn-dispute');
 
     if (statusText) {
@@ -86,6 +87,12 @@ function handleOrderTimeout() {
     if (btnMarkPaid) {
         btnMarkPaid.disabled = true;
         btnMarkPaid.style.opacity = '0.5';
+    }
+
+    // Bloquear también el botón de liberar fondos al expirar
+    if (btnRelease) {
+        btnRelease.disabled = true;
+        btnRelease.style.opacity = '0.5';
     }
 
     if (btnDispute) {
@@ -128,8 +135,7 @@ function abrirOrdenActiva(datosOferta) {
         document.getElementById('order-rate').textContent = `${datosOferta.tasa} Bs / USDT`;
     }
 
-    // Inicia con 60s (prueba rápida) -> Usar 1800 para los 30 min reales en producción
-    startOrderTimer(60); 
+    startOrderTimer(60); // Usar 1800 para producción real (30 min)
 }
 
 if (btnBack) {
@@ -142,7 +148,6 @@ if (btnBack) {
     });
 }
 
-// Ofertas vacías para iniciar limpio (puedes agregar datos de prueba aquí si lo requieres de nuevo)
 const mockOffers = [];
 
 function renderOffers() {
@@ -208,8 +213,8 @@ function renderHistory() {
 function registrarEnHistorial(estado) {
     if (!currentActiveOrder) return;
 
-    let colorStatus = "#10b981"; // Verde por defecto
-    if (estado === "Expirada" || estado === "Disputa") colorStatus = "#dc3545"; // Rojo
+    let colorStatus = "#10b981"; 
+    if (estado === "Expirada" || estado === "Disputa") colorStatus = "#dc3545"; 
 
     orderHistory.unshift({
         id: currentActiveOrder.id,
