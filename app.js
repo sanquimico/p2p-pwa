@@ -193,8 +193,8 @@ document.getElementById('btn-cancel-modal').addEventListener('click', () => moda
 
 document.getElementById('form-order').addEventListener('submit', (e) => {
     e.preventDefault();
-    const amount = document.getElementById('order-amount').value;
-    const rate = document.getElementById('order-rate').value;
+    const amount = document.getElementById('modal-order-amount').value;
+    const rate = document.getElementById('modal-order-rate').value;
     
     mockOffers.unshift({
         id: Date.now(),

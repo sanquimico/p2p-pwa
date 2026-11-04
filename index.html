@@ -115,17 +115,17 @@
             <h2>Publicar Oferta de Custodia</h2>
             <form id="form-order">
                 <label>Tipo de Operación</label>
-                <select id="order-type" class="input-select">
+                <select id="modal-order-type" class="input-select">
                     <option value="sell">Vender USDT (Recibir Pago Móvil)</option>
                     <option value="buy">Comprar USDT (Enviar Pago Móvil)</option>
                 </select>
-
+    
                 <label>Monto USDT</label>
-                <input type="number" id="order-amount" placeholder="Ej: 20" required class="input-text">
-
+                <input type="number" id="modal-order-amount" placeholder="Ej: 20" required class="input-text">
+    
                 <label>Tasa sugerida (Bs / USDT)</label>
-                <input type="number" step="0.01" id="order-rate" placeholder="Ej: 45.50" required class="input-text">
-
+                <input type="number" step="0.01" id="modal-order-rate" placeholder="Ej: 45.50" required class="input-text">
+    
                 <div class="modal-actions">
                     <button type="button" id="btn-cancel-modal" class="btn-secondary">Cancelar</button>
                     <button type="submit" class="btn-primary">Publicar en Escrow</button>
