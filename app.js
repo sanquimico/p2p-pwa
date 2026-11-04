@@ -219,13 +219,11 @@ document.addEventListener('DOMContentLoaded', renderOffers);
 // ==========================================
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').then((reg) => {
-        // Si ya hay un Service Worker esperando al cargar
         if (reg.waiting) {
             mostrarAvisoActualizacion(reg);
             return;
         }
 
-        // Si se detecta un nuevo Service Worker instalándose
         reg.addEventListener('updatefound', () => {
             const newWorker = reg.installing;
             newWorker.addEventListener('statechange', () => {
@@ -236,7 +234,6 @@ if ('serviceWorker' in navigator) {
         });
     });
 
-    // Recarga automática de la página solo cuando el nuevo SW toma el control tras la orden del usuario
     let refreshing = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
         if (refreshing) return;
@@ -245,7 +242,6 @@ if ('serviceWorker' in navigator) {
     });
 }
 
-// Función que dibuja el banner flotante en la pantalla
 function mostrarAvisoActualizacion(reg) {
     if (document.getElementById('update-toast')) return;
 
@@ -261,85 +257,16 @@ function mostrarAvisoActualizacion(reg) {
 
     document.getElementById('btn-update-app').addEventListener('click', () => {
         if (reg.waiting) {
-            // Envía la señal al Service Worker para que aplique la actualización
             reg.waiting.postMessage({ type: 'SKIP_WAITING' });
         }
     });
 }
 
 // ==========================================
-// CONTROL DEL TEMPORIZADOR Y ACCIONES DE ORDEN
+// ACCIONES DE ORDEN (COMPRADOR Y VENDEDOR)
 // ==========================================
 
-function startOrderTimer(durationInSeconds = 1800) {
-    if (orderTimerInterval) {
-        clearInterval(orderTimerInterval);
-    }
-
-    let timer = durationInSeconds;
-    const timerDisplay = document.getElementById('timer-display');
-    if (!timerDisplay) return;
-
-    updateTimerUI(timer, timerDisplay);
-
-    orderTimerInterval = setInterval(() => {
-        timer--;
-
-        if (timer >= 0) {
-            updateTimerUI(timer, timerDisplay);
-        } else {
-            clearInterval(orderTimerInterval);
-            orderTimerInterval = null;
-            handleOrderTimeout();
-        }
-    }, 1000);
-}
-
-function updateTimerUI(seconds, element) {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-
-    const formattedMinutes = String(minutes).padStart(2, '0');
-    const formattedSeconds = String(remainingSeconds).padStart(2, '0');
-
-    element.textContent = `${formattedMinutes}:${formattedSeconds}`;
-}
-
-function handleOrderTimeout() {
-    const statusText = document.getElementById('order-status-text');
-    const statusBanner = document.querySelector('.order-status-banner');
-    const btnMarkPaid = document.getElementById('btn-mark-paid');
-    const btnDispute = document.getElementById('btn-dispute');
-
-    if (statusText) {
-        statusText.textContent = 'Orden expirada por tiempo agotado';
-    }
-    
-    if (statusBanner) {
-        statusBanner.style.backgroundColor = '#dc3545';
-        statusBanner.style.color = '#fff';
-    }
-
-    if (btnMarkPaid) {
-        btnMarkPaid.disabled = true;
-        btnMarkPaid.style.opacity = '0.5';
-    }
-
-    if (btnDispute) {
-        btnDispute.classList.remove('hidden');
-    }
-
-    alert('El tiempo límite de 30 minutos para realizar el pago ha expirado.');
-}
-
-function stopOrderTimer() {
-    if (orderTimerInterval) {
-        clearInterval(orderTimerInterval);
-        orderTimerInterval = null;
-    }
-}
-
-// Acción: Marcar como pagado
+// Acción: Marcar como pagado (Comprador)
 function marcarComoPagado() {
     stopOrderTimer();
 
@@ -370,6 +297,43 @@ function marcarComoPagado() {
     alert('Has notificado el pago. El vendedor verificará sus cuentas para liberar los USDT.');
 }
 
+// Acción: Liberar Fondos (Vendedor)
+function liberarFondos() {
+    stopOrderTimer();
+
+    const statusText = document.getElementById('order-status-text');
+    const statusBanner = document.querySelector('.order-status-banner');
+    const btnMarkPaid = document.getElementById('btn-mark-paid');
+    const btnRelease = document.getElementById('btn-release-funds');
+    const timerDisplay = document.getElementById('timer-display');
+
+    if (statusText) {
+        statusText.textContent = '¡Orden completada con éxito! USDT liberados al comprador.';
+    }
+
+    if (statusBanner) {
+        statusBanner.style.backgroundColor = '#10b981'; // Verde éxito
+        statusBanner.style.color = '#fff';
+    }
+
+    if (btnMarkPaid) {
+        btnMarkPaid.disabled = true;
+        btnMarkPaid.style.opacity = '0.5';
+    }
+
+    if (btnRelease) {
+        btnRelease.disabled = true;
+        btnRelease.style.opacity = '0.5';
+        btnRelease.textContent = 'USDT Liberados';
+    }
+
+    if (timerDisplay) {
+        timerDisplay.textContent = 'COMPLETADO';
+    }
+
+    alert('¡Fondos liberados exitosamente! La orden ha finalizado.');
+}
+
 // Acción: Abrir Disputa
 function abrirDisputaOrden() {
     stopOrderTimer();
@@ -397,10 +361,15 @@ function abrirDisputaOrden() {
 
 // Vincular los eventos de los botones de la orden
 const btnMarkPaid = document.getElementById('btn-mark-paid');
+const btnReleaseFunds = document.getElementById('btn-release-funds');
 const btnDispute = document.getElementById('btn-dispute');
 
 if (btnMarkPaid) {
     btnMarkPaid.addEventListener('click', marcarComoPagado);
+}
+
+if (btnReleaseFunds) {
+    btnReleaseFunds.addEventListener('click', liberarFondos);
 }
 
 if (btnDispute) {
