@@ -308,10 +308,18 @@ if (formOrder) {
         const rateInput = document.getElementById('modal-order-rate').value;
         const networkInput = document.getElementById('modal-order-network').value;
         
+        // Obtener la dirección real de la wallet desde el texto del botón de conexión
+        const btnConnect = document.getElementById('btn-connect');
+        let walletUser = "0xMi...Wallet";
+        
+        if (btnConnect && btnConnect.textContent.includes("...")) {
+            walletUser = btnConnect.textContent; // Toma la dirección truncada ej: 0x1234...abcd
+        }
+
         mockOffers.unshift({
             id: Date.now(),
-            user: "0xMi...Wallet",
-            ops: "0 ops",
+            user: walletUser,
+            ops: "1 op", // O las operaciones reales del usuario
             rep: "100%",
             amount: `${amountInput} USDT`,
             rate: `${rateInput} Bs`,
@@ -327,23 +335,49 @@ if (formOrder) {
 document.addEventListener('DOMContentLoaded', renderOffers);
 
 // ==========================================
-// CONEXIÓN REAL DE WALLET (Web3 / MetaMask / Exodus)
+// CONEXIÓN REAL DE WALLET & CAMBIO DE RED
 // ==========================================
 const btnConnect = document.getElementById('btn-connect');
+
+// Definimos el ID de la red que queremos usar (Ej: Polygon Mainnet o Testnet)
+// Polygon Mainnet ChainId: 0x89 (137 decimal)
+// Polygon Amoy Testnet ChainId: 0x13882 (80002 decimal)
+// BSC Mainnet ChainId: 0x38 (56 decimal)
+const TARGET_CHAIN_ID = '0x89'; // Cambia esto según la red que elijas (aquí ponemos Polygon Mainnet por defecto)
 
 if (btnConnect) {
     btnConnect.addEventListener('click', async () => {
         if (typeof window.ethereum !== 'undefined') {
             try {
+                // 1. Solicitar cuentas de la wallet
                 const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
                 const account = accounts[0];
-                const shortAccount = `${account.substring(0, 6)}...${account.substring(account.length - 4)}`;
                 
+                // 2. Verificar la red actual
+                const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
+                
+                if (currentChainId !== TARGET_CHAIN_ID) {
+                    try {
+                        // Intentar cambiar de red automáticamente
+                        await window.ethereum.request({
+                            method: 'wallet_switchEthereumChain',
+                            params: [{ chainId: TARGET_CHAIN_ID }],
+                        });
+                    } catch (switchError) {
+                        // Si la red no está agregada en la wallet del usuario, puedes manejar el error aquí
+                        console.error("Error al cambiar de red:", switchError);
+                        alert("Por favor, cambia manualmente a la red correcta en tu wallet.");
+                        return;
+                    }
+                }
+
+                // 3. Actualizar interfaz con la cuenta truncada
+                const shortAccount = `${account.substring(0, 6)}...${account.substring(account.length - 4)}`;
                 btnConnect.textContent = shortAccount;
                 btnConnect.style.backgroundColor = '#10b981';
                 btnConnect.style.borderColor = '#10b981';
                 
-                console.log("Wallet conectada con éxito:", account);
+                console.log("Wallet conectada y en red correcta:", account);
             } catch (error) {
                 console.error("El usuario rechazó la conexión de la wallet:", error);
                 alert("No se pudo conectar la wallet. Asegúrate de aprobar la solicitud.");
