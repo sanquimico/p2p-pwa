@@ -340,10 +340,13 @@ document.addEventListener('DOMContentLoaded', renderOffers);
 const btnConnect = document.getElementById('btn-connect');
 
 // Definimos el ID de la red que queremos usar (Ej: Polygon Mainnet o Testnet)
-// Polygon Mainnet ChainId: 0x89 (137 decimal)
-// Polygon Amoy Testnet ChainId: 0x13882 (80002 decimal)
-// BSC Mainnet ChainId: 0x38 (56 decimal)
-const TARGET_CHAIN_ID = '0x89'; // Cambia esto según la red que elijas (aquí ponemos Polygon Mainnet por defecto)
+// Polygon Mainnet ChainId (Produccion): '0x89' (137 decimal)
+// Polygon Amoy Testnet ChainId (Pruebas seguras): '0x13882' (80002 decimal)
+// BSC Mainnet ChainId (Produccion): '0x38' (56 decimal)
+
+// CAMBIO TEMPORAL PARA PRUEBAS: Usamos Amoy Testnet para no gastar gas real
+const TARGET_CHAIN_ID = '0x13882'; // <-- CAMBIADO TEMPORALMENTE A TESTNET
+// Cambia esto según la red que elijas
 
 if (btnConnect) {
     btnConnect.addEventListener('click', async () => {
