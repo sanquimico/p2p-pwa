@@ -1,4 +1,4 @@
-const CACHE_NAME = 'p2p-escrow-v4';
+const CACHE_NAME = 'p2p-escrow-v5'; // Sube la versión aquí
 const assetsToCache = [
   './',
   './index.html',
@@ -6,11 +6,13 @@ const assetsToCache = [
   './app.js'
 ];
 
-// 1. Instalación: Guarda los archivos en silencio (sin forzar activación inmediata)
+// 1. Instalación: Guarda los archivos y fuerza la activación inmediata
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(assetsToCache);
+    }).then(() => {
+      return self.skipWaiting(); // Fuerza a que tome el control sin esperar
     })
   );
 });
@@ -29,7 +31,7 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
-  self.clients.claim();
+  return self.clients.claim(); // Toma el control de las pestañas abiertas de inmediato
 });
 
 // 3. Estrategia Network First (Red primero, respaldo en caché si no hay internet)
