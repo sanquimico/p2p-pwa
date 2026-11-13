@@ -302,33 +302,112 @@ if (btnCancelModal && modal) {
 
 const formOrder = document.getElementById('form-order');
 if (formOrder) {
-    formOrder.addEventListener('submit', (e) => {
+    formOrder.addEventListener('submit', async (e) => {
         e.preventDefault();
+        
         const amountInput = document.getElementById('modal-order-amount').value;
         const rateInput = document.getElementById('modal-order-rate').value;
         const networkInput = document.getElementById('modal-order-network').value;
         
-        // Obtener la dirección real de la wallet desde el texto del botón de conexión
-        const btnConnect = document.getElementById('btn-connect');
-        let walletUser = "0xMi...Wallet";
-        
-        if (btnConnect && btnConnect.textContent.includes("...")) {
-            walletUser = btnConnect.textContent; // Toma la dirección truncada ej: 0x1234...abcd
+        // Verificar que MetaMask esté inyectado
+        if (typeof window.ethereum === 'undefined') {
+            alert("Por favor instala o desbloquea MetaMask.");
+            return;
         }
 
-        mockOffers.unshift({
-            id: Date.now(),
-            user: walletUser,
-            ops: "1 op", // O las operaciones reales del usuario
-            rep: "100%",
-            amount: `${amountInput} USDT`,
-            rate: `${rateInput} Bs`,
-            net: networkInput
-        });
-        
-        renderOffers();
-        modal.classList.add('hidden');
-        e.target.reset();
+        try {
+            // 1. Inicializar el proveedor y el firmante (Signer) con Ethers.js
+            const provider = new ethers.providers.Web3Provider(window.ethereum);
+            const signer = provider.getSigner();
+
+            // 2. Dirección de tu Smart Contract de Escrow en Amoy y su ABI
+            const contractAddress = "0xfcfc88bdff4B9493F300E6e093785432d6B1a392";
+            const contractABI = [
+                {
+                    "inputs": [
+                        { "internalType": "uint256", "name": "montoCrypto", "type": "uint256" },
+                        { "internalType": "uint256", "name": "tasa", "type": "uint256" }
+                    ],
+                    "name": "crearOferta",
+                    "outputs": [],
+                    "stateMutability": "payable",
+                    "type": "function"
+                },
+                {
+                    "anonymous": false,
+                    "inputs": [
+                        { "indexed": true, "internalType": "uint256", "name": "id", "type": "uint256" },
+                        { "indexed": true, "internalType": "address", "name": "vendedor", "type": "address" },
+                        { "indexed": false, "internalType": "uint256", "name": "montoCrypto", "type": "uint256" },
+                        { "indexed": false, "internalType": "uint256", "name": "tasa", "type": "uint256" }
+                    ],
+                    "name": "OfertaCreada",
+                    "type": "event"
+                },
+                {
+                    "inputs": [],
+                    "name": "contadorOfertas",
+                    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+                    "stateMutability": "view",
+                    "type": "function"
+                },
+                {
+                    "inputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+                    "name": "ofertas",
+                    "outputs": [
+                        { "internalType": "address payable", "name": "vendedor", "type": "address" },
+                        { "internalType": "uint256", "name": "montoCrypto", "type": "uint256" },
+                        { "internalType": "uint256", "name": "tasa", "type": "uint256" },
+                        { "internalType": "bool", "name": "activa", "type": "bool" }
+                    ],
+                    "stateMutability": "view",
+                    "type": "function"
+                }
+            ];
+
+            // 3. Crear instancia del contrato
+            const escrowContract = new ethers.Contract(contractAddress, contractABI, signer);
+
+            // Convertir montos a unidades de wei / decimales correctos
+            const montoParseado = ethers.utils.parseUnits(amountInput, 6); 
+            const tasaParseada = ethers.utils.parseUnits(rateInput, 18);
+
+            // 4. LLAMADA AL CONTRATO
+            console.log("Enviando transacción al contrato inteligente...");
+            const tx = await escrowContract.crearOferta(montoParseado, tasaParseada, {
+                value: ethers.utils.parseEther("0.001") 
+            });
+
+            alert("Transacción enviada. Esperando confirmación en la red Amoy...");
+            
+            // Esperar a que la blockchain confirme la transacción
+            const receipt = await tx.wait();
+            console.log("¡Transacción confirmada!", receipt.transactionHash);
+
+            // 5. Obtener dirección actual conectada sin errores
+            const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+            const userAddress = accounts[0] || "0x0000...0000";
+            const walletUser = `${userAddress.substring(0, 6)}...${userAddress.substring(userAddress.length - 4)}`;
+
+            mockOffers.unshift({
+                id: Date.now(),
+                user: walletUser,
+                ops: "1 op",
+                rep: "100%",
+                amount: `${amountInput} USDT`,
+                rate: `${rateInput} Bs`,
+                net: networkInput
+            });
+            
+            renderOffers();
+            modal.classList.add('hidden');
+            e.target.reset();
+            alert("¡Oferta publicada exitosamente en la blockchain!");
+
+        } catch (error) {
+            console.error("Error al interactuar con el contrato:", error);
+            alert("La transacción fue cancelada o falló: " + (error.reason || error.message));
+        }
     });
 }
 
@@ -338,43 +417,30 @@ document.addEventListener('DOMContentLoaded', renderOffers);
 // CONEXIÓN REAL DE WALLET & CAMBIO DE RED
 // ==========================================
 const btnConnect = document.getElementById('btn-connect');
-
-// Definimos el ID de la red que queremos usar (Ej: Polygon Mainnet o Testnet)
-// Polygon Mainnet ChainId (Produccion): '0x89' (137 decimal)
-// Polygon Amoy Testnet ChainId (Pruebas seguras): '0x13882' (80002 decimal)
-// BSC Mainnet ChainId (Produccion): '0x38' (56 decimal)
-
-// CAMBIO TEMPORAL PARA PRUEBAS: Usamos Amoy Testnet para no gastar gas real
-const TARGET_CHAIN_ID = '0x13882'; // <-- CAMBIADO TEMPORALMENTE A TESTNET
-// Cambia esto según la red que elijas
+const TARGET_CHAIN_ID = '0x13882'; // Polygon Amoy Testnet
 
 if (btnConnect) {
     btnConnect.addEventListener('click', async () => {
         if (typeof window.ethereum !== 'undefined') {
             try {
-                // 1. Solicitar cuentas de la wallet
                 const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
                 const account = accounts[0];
                 
-                // 2. Verificar la red actual
                 const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
                 
                 if (currentChainId !== TARGET_CHAIN_ID) {
                     try {
-                        // Intentar cambiar de red automáticamente
                         await window.ethereum.request({
                             method: 'wallet_switchEthereumChain',
                             params: [{ chainId: TARGET_CHAIN_ID }],
                         });
                     } catch (switchError) {
-                        // Si la red no está agregada en la wallet del usuario, puedes manejar el error aquí
                         console.error("Error al cambiar de red:", switchError);
                         alert("Por favor, cambia manualmente a la red correcta en tu wallet.");
                         return;
                     }
                 }
 
-                // 3. Actualizar interfaz con la cuenta truncada
                 const shortAccount = `${account.substring(0, 6)}...${account.substring(account.length - 4)}`;
                 btnConnect.textContent = shortAccount;
                 btnConnect.style.backgroundColor = '#10b981';
@@ -386,7 +452,7 @@ if (btnConnect) {
                 alert("No se pudo conectar la wallet. Asegúrate de aprobar la solicitud.");
             }
         } else {
-            alert("No se detectó ninguna wallet Web3 (como MetaMask o Exodus). Por favor instala una para conectar.");
+            alert("No se detectó ninguna wallet Web3 (como MetaMask). Por favor instala una para conectar.");
         }
     });
 }
@@ -442,7 +508,6 @@ function mostrarAvisoActualizacion(reg) {
 // ==========================================
 // ACCIONES DE ORDEN (COMPRADOR Y VENDEDOR)
 // ==========================================
-
 function marcarComoPagado() {
     stopOrderTimer();
     const statusText = document.getElementById('order-status-text');
