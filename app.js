@@ -33,7 +33,6 @@ btnCloseBanner.addEventListener('click', () => {
 // ==========================================
 let orderTimerInterval = null;
 
-// 60 segundos para pruebas rápidas (1800s = 30 min original para producción)
 function startOrderTimer(durationInSeconds = 60) {
     if (orderTimerInterval) {
         clearInterval(orderTimerInterval);
@@ -75,25 +74,19 @@ function handleOrderTimeout() {
     const btnRelease = document.getElementById('btn-release-funds');
     const btnDispute = document.getElementById('btn-dispute');
 
-    if (statusText) {
-        statusText.textContent = 'Orden expirada por tiempo agotado';
-    }
-    
+    if (statusText) statusText.textContent = 'Orden expirada por tiempo agotado';
     if (statusBanner) {
         statusBanner.style.backgroundColor = '#dc3545';
         statusBanner.style.color = '#fff';
     }
-
     if (btnMarkPaid) {
         btnMarkPaid.disabled = true;
         btnMarkPaid.style.opacity = '0.5';
     }
-
     if (btnRelease) {
         btnRelease.disabled = true;
         btnRelease.style.opacity = '0.5';
     }
-
     if (btnDispute) {
         btnDispute.classList.remove('hidden');
     }
@@ -125,16 +118,13 @@ function abrirOrdenActiva(datosOferta) {
     if (tradeTabsSection) tradeTabsSection.classList.add('hidden');
     if (filtersSection) filtersSection.classList.add('hidden');
     if (offersContainer) offersContainer.classList.add('hidden');
-    
     if (orderViewSection) orderViewSection.classList.remove('hidden');
     
-    // Resetear estados visuales de la orden para que nazca limpia
     const statusText = document.getElementById('order-status-text');
     const statusBanner = document.querySelector('.order-status-banner');
     const btnMarkPaid = document.getElementById('btn-mark-paid');
     const btnRelease = document.getElementById('btn-release-funds');
     const btnDispute = document.getElementById('btn-dispute');
-    const timerDisplay = document.getElementById('timer-display');
 
     if (statusText) statusText.textContent = 'Esperando depósito / pago...';
     if (statusBanner) {
@@ -163,7 +153,7 @@ function abrirOrdenActiva(datosOferta) {
         document.getElementById('order-rate').textContent = `${datosOferta.tasa} Bs / USDT`;
     }
 
-    startOrderTimer(60); // Usar 1800 para producción real (30 min)
+    startOrderTimer(60);
 }
 
 if (btnBack) {
@@ -288,18 +278,60 @@ function initTrade(id) {
     abrirOrdenActiva(datosOferta);
 }
 
-// Control del Modal para publicar oferta
+// ==========================================
+// CONTROL DE PESTAÑAS Y MODAL (Sincronizado)
+// ==========================================
+const tabBuy = document.getElementById('tab-buy');
+const tabSell = document.getElementById('tab-sell');
+let currentTradeType = 'buy'; // Inicia en Comprar según HTML por defecto
+
+if (tabBuy && tabSell) {
+    tabBuy.addEventListener('click', () => {
+        tabBuy.classList.add('active');
+        tabSell.classList.remove('active');
+        currentTradeType = 'buy';
+        console.log("Cambiado a vista: Comprar USDT");
+    });
+
+    tabSell.addEventListener('click', () => {
+        tabSell.classList.add('active');
+        tabBuy.classList.remove('active');
+        currentTradeType = 'sell';
+        console.log("Cambiado a vista: Vender USDT");
+    });
+}
+
 const modal = document.getElementById('modal-order');
 const btnNewOrder = document.getElementById('btn-new-order');
 const btnCancelModal = document.getElementById('btn-cancel-modal');
 
 if (btnNewOrder && modal) {
-    btnNewOrder.addEventListener('click', () => modal.classList.remove('hidden'));
+    btnNewOrder.addEventListener('click', () => {
+        modal.classList.remove('hidden');
+
+        // Sincronizar automáticamente el Tipo de Operación
+        const selectOperation = document.getElementById('modal-order-type');
+        if (selectOperation) {
+            selectOperation.value = currentTradeType; // 'buy' o 'sell'
+        }
+
+        // Sincronizar automáticamente la Red según el filtro
+        const filterNetwork = document.getElementById('filter-network');
+        const modalNetwork = document.getElementById('modal-order-network');
+        if (filterNetwork && modalNetwork && filterNetwork.value !== 'all') {
+            const netVal = filterNetwork.value;
+            modalNetwork.value = (netVal === 'polygon') ? 'Polygon' : 'BSC';
+        }
+    });
 }
+
 if (btnCancelModal && modal) {
     btnCancelModal.addEventListener('click', () => modal.classList.add('hidden'));
 }
 
+// ==========================================
+// FORMULARIO Y CONTRATO INTELIGENTE
+// ==========================================
 const formOrder = document.getElementById('form-order');
 if (formOrder) {
     formOrder.addEventListener('submit', async (e) => {
@@ -309,18 +341,15 @@ if (formOrder) {
         const rateInput = document.getElementById('modal-order-rate').value;
         const networkInput = document.getElementById('modal-order-network').value;
         
-        // Verificar que MetaMask esté inyectado
         if (typeof window.ethereum === 'undefined') {
             alert("Por favor instala o desbloquea MetaMask.");
             return;
         }
 
         try {
-            // 1. Inicializar el proveedor y el firmante (Signer) con Ethers.js
             const provider = new ethers.providers.Web3Provider(window.ethereum);
             const signer = provider.getSigner();
 
-            // 2. Dirección de tu Smart Contract de Escrow en Amoy y su ABI
             const contractAddress = "0xfcfc88bdff4B9493F300E6e093785432d6B1a392";
             const contractABI = [
                 {
@@ -365,14 +394,11 @@ if (formOrder) {
                 }
             ];
 
-            // 3. Crear instancia del contrato
             const escrowContract = new ethers.Contract(contractAddress, contractABI, signer);
 
-            // Convertir montos a unidades de wei / decimales correctos
             const montoParseado = ethers.utils.parseUnits(amountInput, 6); 
             const tasaParseada = ethers.utils.parseUnits(rateInput, 18);
 
-            // 4. LLAMADA AL CONTRATO
             console.log("Enviando transacción al contrato inteligente...");
             const tx = await escrowContract.crearOferta(montoParseado, tasaParseada, {
                 value: ethers.utils.parseEther("0.001") 
@@ -380,11 +406,9 @@ if (formOrder) {
 
             alert("Transacción enviada. Esperando confirmación en la red Amoy...");
             
-            // Esperar a que la blockchain confirme la transacción
             const receipt = await tx.wait();
             console.log("¡Transacción confirmada!", receipt.transactionHash);
 
-            // 5. Obtener dirección actual conectada sin errores
             const accounts = await window.ethereum.request({ method: 'eth_accounts' });
             const userAddress = accounts[0] || "0x0000...0000";
             const walletUser = `${userAddress.substring(0, 6)}...${userAddress.substring(userAddress.length - 4)}`;
@@ -585,23 +609,3 @@ const btnDispute = document.getElementById('btn-dispute');
 if (btnMarkPaid) btnMarkPaid.addEventListener('click', marcarComoPagado);
 if (btnReleaseFunds) btnReleaseFunds.addEventListener('click', liberarFondos);
 if (btnDispute) btnDispute.addEventListener('click', abrirDisputaOrden);
-
-// ==========================================
-// CONTROL DE PESTAÑAS (Comprar / Vender USDT)
-// ==========================================
-const tabBuy = document.getElementById('tab-buy');
-const tabSell = document.getElementById('tab-sell');
-
-if (tabBuy && tabSell) {
-    tabBuy.addEventListener('click', () => {
-        tabBuy.classList.add('active');
-        tabSell.classList.remove('active');
-        console.log("Cambiado a vista: Comprar USDT");
-    });
-
-    tabSell.addEventListener('click', () => {
-        tabSell.classList.add('active');
-        tabBuy.classList.remove('active');
-        console.log("Cambiado a vista: Vender USDT");
-    });
-}

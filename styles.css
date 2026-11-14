@@ -340,3 +340,19 @@ body {
     background-color: #ef4444;
     color: #ffffff;
 }
+
+/* Pestaña ACTIVA de Comprar USDT (Verde confianza) */
+#tab-buy.active {
+    background-color: #065f46 !important;
+    color: #ffffff !important;
+    border-color: #10b981 !important;
+    font-weight: bold;
+}
+
+/* Pestaña ACTIVA de Vender USDT (Rojo/Borgoña distintivo) */
+#tab-sell.active {
+    background-color: #991b1b !important;
+    color: #ffffff !important;
+    border-color: #ef4444 !important;
+    font-weight: bold;
+}
