@@ -5,6 +5,69 @@ const btnCloseBanner = document.getElementById('btn-close-banner');
 const pwaBadge = document.getElementById('pwa-badge');
 
 const TARGET_CHAIN_ID = '0x13882'; // Polygon Amoy Testnet (80002)
+const CONTRACT_ADDRESS = "0xFA8B987165D10a3C03d8008DD946707fC89346E6";
+
+const CONTRACT_ABI = [
+    {
+        "inputs": [
+            { "internalType": "uint256", "name": "_montoCrypto", "type": "uint256" },
+            { "internalType": "uint256", "name": "_tasa", "type": "uint256" }
+        ],
+        "name": "crearOferta",
+        "outputs": [],
+        "stateMutability": "payable",
+        "type": "function"
+    },
+    {
+        "inputs": [{ "internalType": "uint256", "name": "_id", "type": "uint256" }],
+        "name": "tomarOferta",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [{ "internalType": "uint256", "name": "_id", "type": "uint256" }],
+        "name": "liberarFondos",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "contadorOfertas",
+        "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "feePercent",
+        "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+        "name": "ofertas",
+        "outputs": [
+            { "internalType": "uint256", "name": "id", "type": "uint256" },
+            { "internalType": "address payable", "name": "vendedor", "type": "address" },
+            { "internalType": "address payable", "name": "comprador", "type": "address" },
+            { "internalType": "uint256", "name": "montoDeposito", "type": "uint256" },
+            { "internalType": "uint256", "name": "montoCrypto", "type": "uint256" },
+            { "internalType": "uint256", "name": "tasa", "type": "uint256" },
+            { "internalType": "bool", "name": "activa", "type": "bool" },
+            { "internalType": "bool", "name": "completada", "type": "bool" }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    }
+];
+
+const AMOY_GAS_OVERRIDES = {
+    maxPriorityFeePerGas: ethers.utils.parseUnits("30", "gwei"),
+    maxFeePerGas: ethers.utils.parseUnits("35", "gwei")
+};
 
 // Sistema de Notificaciones Toast
 function showToast(message, isError = false) {
@@ -108,16 +171,19 @@ function stopOrderTimer() {
 const offersContainer = document.getElementById('offers-container');
 const tradeTabsSection = document.querySelector('.trade-tabs');
 const filtersSection = document.querySelector('.filters');
+const historySection = document.querySelector('.history-section');
 const orderViewSection = document.getElementById('order-view');
 const btnBack = document.getElementById('btn-back');
 
 let currentActiveOrder = null;
 const orderHistory = [];
+let onChainOffers = [];
 
 function abrirOrdenActiva(datosOferta) {
     if (tradeTabsSection) tradeTabsSection.classList.add('hidden');
     if (filtersSection) filtersSection.classList.add('hidden');
     if (offersContainer) offersContainer.classList.add('hidden');
+    if (historySection) historySection.classList.add('hidden');
     if (orderViewSection) orderViewSection.classList.remove('hidden');
     
     const statusText = document.getElementById('order-status-text');
@@ -126,7 +192,7 @@ function abrirOrdenActiva(datosOferta) {
     const btnRelease = document.getElementById('btn-release-funds');
     const btnDispute = document.getElementById('btn-dispute');
 
-    if (statusText) statusText.textContent = 'Esperando depósito / pago...';
+    if (statusText) statusText.textContent = 'Esperando depósito / pago (Comisión 1% incluida)...';
     if (statusBanner) { statusBanner.style.backgroundColor = '#2563eb'; statusBanner.style.color = '#fff'; }
     if (btnMarkPaid) { btnMarkPaid.disabled = false; btnMarkPaid.style.opacity = '1'; btnMarkPaid.textContent = 'Ya pagué (Notificar al Vendedor)'; }
     if (btnRelease) { btnRelease.disabled = false; btnRelease.style.opacity = '1'; btnRelease.textContent = 'Liberar USDT (Confirmar Pago)'; }
@@ -153,6 +219,8 @@ if (btnBack) {
         if (tradeTabsSection) tradeTabsSection.classList.remove('hidden');
         if (filtersSection) filtersSection.classList.remove('hidden');
         if (offersContainer) offersContainer.classList.remove('hidden');
+        if (historySection) historySection.classList.remove('hidden');
+        cargarOfertasBlockchain();
     });
 }
 
@@ -174,8 +242,50 @@ if (btnSendChat && chatInput && chatMessages) {
     });
 }
 
-// Lista limpia sin ofertas falsas por defecto
-const mockOffers = [];
+// ==========================================
+// SINCRONIZACIÓN EN VIVO CON SMART CONTRACT
+// ==========================================
+async function cargarOfertasBlockchain() {
+    if (typeof window.ethereum === 'undefined') {
+        renderOffers();
+        return;
+    }
+
+    try {
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+        const total = await contract.contadorOfertas();
+        const totalNum = total.toNumber();
+
+        const loaded = [];
+        for (let i = totalNum; i >= 1; i--) {
+            const oferta = await contract.ofertas(i);
+            if (oferta.activa) {
+                const montoCryptoFormateado = ethers.utils.formatUnits(oferta.montoCrypto, 6);
+                const tasaFormateada = parseFloat(ethers.utils.formatUnits(oferta.tasa, 18)).toFixed(2);
+                const vendedorCorto = `${oferta.vendedor.substring(0, 6)}...${oferta.vendedor.substring(oferta.vendedor.length - 4)}`;
+
+                loaded.push({
+                    id: oferta.id.toNumber(),
+                    user: vendedorCorto,
+                    vendedorFull: oferta.vendedor,
+                    compradorFull: oferta.comprador,
+                    ops: "Verificado",
+                    rep: "100%",
+                    amount: `${montoCryptoFormateado} USDT`,
+                    rate: `${tasaFormateada} Bs`,
+                    net: "Polygon",
+                    type: "buy"
+                });
+            }
+        }
+        onChainOffers = loaded;
+    } catch (err) {
+        console.warn("Esperando conexión a Amoy para sincronizar ofertas:", err.message);
+    }
+
+    renderOffers();
+}
 
 function renderOffers() {
     const container = document.getElementById('offers-container');
@@ -184,14 +294,13 @@ function renderOffers() {
     
     const filterNet = document.getElementById('filter-network')?.value || 'all';
 
-    const filtered = mockOffers.filter(o => {
-        const matchType = (currentTradeType === 'buy') ? (o.type === 'buy') : (o.type === 'sell');
+    const filtered = onChainOffers.filter(o => {
         const matchNet = (filterNet === 'all' || o.net.toLowerCase() === filterNet.toLowerCase());
-        return matchType && matchNet;
+        return matchNet;
     });
 
     if (filtered.length === 0) {
-        container.innerHTML = `<p style="color: #8b949e; font-size: 0.9rem; text-align: center; padding: 20px;">No hay ofertas publicadas en este momento. Publica una usando el botón superior.</p>`;
+        container.innerHTML = `<p style="color: #8b949e; font-size: 0.9rem; text-align: center; padding: 20px;">No hay ofertas activas en el contrato en este momento. Publica una usando el botón superior.</p>`;
         return;
     }
 
@@ -264,18 +373,47 @@ function registrarEnHistorial(estado) {
     renderHistory();
 }
 
-function initTrade(id) {
-    const oferta = mockOffers.find(o => o.id === id);
+async function initTrade(id) {
+    const oferta = onChainOffers.find(o => o.id === id);
     if (!oferta) return;
+
+    if (typeof window.ethereum === 'undefined') {
+        showToast("Conecta tu wallet descentralizada primero.", true);
+        return;
+    }
+
+    const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+    const currentAccount = (accounts[0] || "").toLowerCase();
+
+    // Si quien hace clic es un comprador distinto al vendedor y la orden aún no tiene comprador en blockchain, llama a tomarOferta()
+    if (
+        currentAccount &&
+        currentAccount !== oferta.vendedorFull.toLowerCase() &&
+        oferta.compradorFull === "0x0000000000000000000000000000000000000000"
+    ) {
+        try {
+            const provider = new ethers.providers.Web3Provider(window.ethereum);
+            const signer = provider.getSigner();
+            const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+            showToast("Registrando toma de orden en el Smart Contract...");
+            const tx = await contract.tomarOferta(id, AMOY_GAS_OVERRIDES);
+            await tx.wait();
+            showToast("¡Orden tomada en blockchain!");
+        } catch (err) {
+            console.error(err);
+            showToast("No se pudo tomar la orden en blockchain.", true);
+            return;
+        }
+    }
 
     const montoCryptoNum = parseFloat(oferta.amount.replace(/[^0-9.]/g, ''));
     const tasaNum = parseFloat(oferta.rate.replace(/[^0-9.]/g, ''));
-    
     const montoFiatTotal = (!isNaN(montoCryptoNum) && !isNaN(tasaNum)) ? (montoCryptoNum * tasaNum).toFixed(2) : "0.00";
 
     currentActiveOrder = {
         id: oferta.id,
         user: oferta.user,
+        vendedorFull: oferta.vendedorFull,
         net: oferta.net,
         montoCrypto: !isNaN(montoCryptoNum) ? montoCryptoNum.toFixed(2) : "0.00",
         montoFiat: montoFiatTotal,
@@ -328,7 +466,6 @@ if (btnNewOrder && modal) {
             if (filterNetwork && filterNetwork.value !== 'all') {
                 modalNetwork.value = filterNetwork.value;
             } else {
-                // Por defecto selecciona Polygon para evitar errores de red
                 modalNetwork.value = 'Polygon';
             }
         }
@@ -349,7 +486,6 @@ if (formOrder) {
         
         const amountInput = parseFloat(document.getElementById('modal-order-amount').value);
         const rateInput = parseFloat(document.getElementById('modal-order-rate').value);
-        const typeInput = document.getElementById('modal-order-type').value;
         const networkInput = document.getElementById('modal-order-network').value;
 
         if (isNaN(amountInput) || amountInput <= 0) {
@@ -365,9 +501,8 @@ if (formOrder) {
             return;
         }
 
-        // Validación de coherencia entre la red elegida en el modal y la wallet
         if (networkInput !== 'Polygon') {
-            showToast("El contrato de prueba está desplegado en Polygon Amoy. Selecciona Polygon.", true);
+            showToast("El contrato está desplegado en Polygon Amoy. Selecciona Polygon.", true);
             return;
         }
 
@@ -383,53 +518,23 @@ if (formOrder) {
 
             const provider = new ethers.providers.Web3Provider(window.ethereum);
             const signer = provider.getSigner();
-            const contractAddress = "0xfcfc88bdff4B9493F300E6e093785432d6B1a392";
-            
-            const contractABI = [
-                {
-                    "inputs": [
-                        { "internalType": "uint256", "name": "montoCrypto", "type": "uint256" },
-                        { "internalType": "uint256", "name": "tasa", "type": "uint256" }
-                    ],
-                    "name": "crearOferta",
-                    "outputs": [],
-                    "stateMutability": "payable",
-                    "type": "function"
-                }
-            ];
+            const escrowContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
 
-            const escrowContract = new ethers.Contract(contractAddress, contractABI, signer);
             const montoParseado = ethers.utils.parseUnits(amountInput.toString(), 6); 
             const tasaParseada = ethers.utils.parseUnits(rateInput.toString(), 18);
 
-            showToast("Confirma la transacción en tu wallet...");
+            showToast("Confirma la garantía en tu wallet...");
 
-            // Se especifica gas mínimo exigido por Polygon Amoy (>= 25 Gwei)
+            // Se deposita 0.01 POL de prueba para visualizar claramente el cobro del 1% al liberar
             const tx = await escrowContract.crearOferta(montoParseado, tasaParseada, {
-                value: ethers.utils.parseEther("0.001"),
-                maxPriorityFeePerGas: ethers.utils.parseUnits("30", "gwei"),
-                maxFeePerGas: ethers.utils.parseUnits("35", "gwei")
+                value: ethers.utils.parseEther("0.01"),
+                ...AMOY_GAS_OVERRIDES
             });
 
             showToast("Transacción enviada. Esperando confirmación en Amoy...");
             await tx.wait();
 
-            const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-            const userAddress = accounts[0] || "0x0000...0000";
-            const walletUser = `${userAddress.substring(0, 6)}...${userAddress.substring(userAddress.length - 4)}`;
-
-            mockOffers.unshift({
-                id: Date.now(),
-                user: walletUser,
-                ops: "1 op",
-                rep: "100%",
-                amount: `${amountInput} USDT`,
-                rate: `${rateInput.toFixed(2)} Bs`,
-                net: networkInput,
-                type: typeInput
-            });
-            
-            renderOffers();
+            await cargarOfertasBlockchain();
             modal.classList.add('hidden');
             e.target.reset();
             showToast("¡Oferta publicada exitosamente en la blockchain!");
@@ -445,7 +550,7 @@ if (formOrder) {
     });
 }
 
-document.addEventListener('DOMContentLoaded', renderOffers);
+document.addEventListener('DOMContentLoaded', cargarOfertasBlockchain);
 
 // ==========================================
 // CONEXIÓN DE WALLET (Amplio / Genérico)
@@ -475,6 +580,7 @@ if (btnConnect) {
                 btnConnect.textContent = `${account.substring(0, 6)}...${account.substring(account.length - 4)}`;
                 btnConnect.style.backgroundColor = '#10b981';
                 showToast("Wallet descentralizada conectada con éxito.");
+                cargarOfertasBlockchain();
             } catch (error) {
                 showToast("Conexión rechazada por el usuario.", true);
             }
@@ -485,7 +591,7 @@ if (btnConnect) {
 }
 
 // ==========================================
-// ACCIONES DE ORDEN
+// ACCIONES DE ORDEN (CON LIBERACIÓN Y COMISIÓN ON-CHAIN)
 // ==========================================
 function marcarComoPagado() {
     stopOrderTimer();
@@ -499,20 +605,45 @@ function marcarComoPagado() {
     showToast("Pago notificado al vendedor.");
 }
 
-function liberarFondos() {
+async function liberarFondos() {
+    if (!currentActiveOrder) return;
+
+    if (typeof window.ethereum !== 'undefined') {
+        try {
+            const provider = new ethers.providers.Web3Provider(window.ethereum);
+            const signer = provider.getSigner();
+            const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+            const ofertaOnChain = await contract.ofertas(currentActiveOrder.id);
+
+            // Ejecuta la liberación real en blockchain si hay un comprador distinto registrado
+            if (
+                ofertaOnChain.activa &&
+                ofertaOnChain.comprador !== "0x0000000000000000000000000000000000000000"
+            ) {
+                showToast("Ejecutando liberación en Smart Contract (cobrando 1% de comisión)...");
+                const tx = await contract.liberarFondos(currentActiveOrder.id, AMOY_GAS_OVERRIDES);
+                await tx.wait();
+            }
+        } catch (err) {
+            console.error("Error al liberar en contrato:", err);
+            showToast("Verifica que la orden tenga un comprador registrado o gas suficiente.", true);
+            return;
+        }
+    }
+
     stopOrderTimer();
     const statusText = document.getElementById('order-status-text');
     const statusBanner = document.querySelector('.order-status-banner');
     const btnMarkPaid = document.getElementById('btn-mark-paid');
     const btnRelease = document.getElementById('btn-release-funds');
     
-    if (statusText) statusText.textContent = '¡Orden completada! USDT liberados.';
+    if (statusText) statusText.textContent = '¡Orden completada! Fondos liberados y comisión 1% transferida.';
     if (statusBanner) { statusBanner.style.backgroundColor = '#10b981'; }
     if (btnMarkPaid) btnMarkPaid.disabled = true;
     if (btnRelease) { btnRelease.disabled = true; btnRelease.style.opacity = '0.5'; }
 
     registrarEnHistorial("Completado");
-    showToast("¡Fondos liberados exitosamente!");
+    showToast("¡Fondos liberados y comisión cobrada con éxito!");
 }
 
 const btnMarkPaid = document.getElementById('btn-mark-paid');
