@@ -33,15 +33,17 @@
     </header>
 
     <main class="container">
-        <!-- Sección Explicativa / Ventajas de la PWA -->
+        <!-- Sección Explicativa / Ventajas, Comisión y Guía de Red -->
         <section class="info-guide-section" style="background: var(--card-bg); border: 1px solid var(--border-color); padding: 12px 15px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85rem; color: var(--text-muted);">
             <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="document.getElementById('guide-content').classList.toggle('hidden')">
-                <strong style="color: var(--text-main);">💡 ¿Cómo funciona el Escrow P2P y sus Ventajas? [Ver Guía]</strong>
+                <strong style="color: var(--text-main);">💡 ¿Cómo funciona el Escrow P2P, Comisiones y Redes? [Ver Guía]</strong>
                 <span>▼</span>
             </div>
-            <div id="guide-content" class="hidden" style="margin-top: 10px; line-height: 1.4;">
-                <p><strong>Ventajas:</strong> Custodia descentralizada en Smart Contract, cero comisiones de intermediarios centralizados, chat cifrado privado para datos de Pago Móvil y total soberanía de tus fondos.</p>
-                <p style="margin-top: 6px;"><strong>Cómo usar:</strong> 1. Conecta tu MetaMask (Red Polygon Amoy). 2. Publica o toma una oferta en Comprar/Vender. 3. Usa el chat privado cifrado para coordinar el pago. 4. Libera los USDT una vez verificado el dinero en tu banco.</p>
+            <div id="guide-content" class="hidden" style="margin-top: 10px; line-height: 1.5;">
+                <p><strong>Ventajas:</strong> Custodia descentralizada en Smart Contract, chat cifrado privado para datos de Pago Móvil y soberanía total de tus fondos sin intermediarios pesados.</p>
+                <p style="margin-top: 6px;"><strong>Comisiones:</strong> La plataforma aplica una pequeña comisión operativa por transacción completada para sostener el servicio y los costos de infraestructura.</p>
+                <p style="margin-top: 6px;"><strong>¿Qué red elegir?:</strong> Actualmente operamos en la red de pruebas <strong>Polygon Amoy Testnet</strong>. Asegúrate de tener configurada esta red en tu wallet descentralizada (MetaMask, Exodus, etc.) y contar con fondos de prueba antes de publicar o tomar ofertas.</p>
+                <p style="margin-top: 6px;"><strong>Cómo usar:</strong> 1. Conecta tu wallet descentralizada. 2. Selecciona Comprar o Vender. 3. Publica una oferta o toma una existente. 4. Coordina el pago por Pago Móvil mediante el chat cifrado y libera los USDT al verificar.</p>
             </div>
         </section>
 
@@ -63,7 +65,7 @@
 
         <!-- Lista de Ofertas P2P -->
         <section class="offers-list" id="offers-container">
-            <!-- Las ofertas se cargan dinámicamente desde app.js -->
+            <!-- Las ofertas se cargan dinámicamente desde app.js (inicia limpio) -->
         </section>
 
         <!-- Historial de Transacciones -->
@@ -131,7 +133,7 @@
         </div>
     </main>
 
-    <!-- Modal de Registro de Oferta Simulada -->
+    <!-- Modal de Registro de Oferta -->
     <div id="modal-order" class="modal hidden">
         <div class="modal-content">
             <h2>Publicar Oferta de Custodia</h2>
@@ -141,9 +143,9 @@
                     <option value="sell">Vender USDT (Recibir Pago Móvil)</option>
                     <option value="buy">Comprar USDT (Enviar Pago Móvil)</option>
                 </select>
-                <label>Red Blockchain</label>
+                <label>Red Blockchain (Recomendada: Polygon Amoy)</label>
                 <select id="modal-order-network" class="input-select">
-                    <option value="Polygon">Polygon (MATIC)</option>
+                    <option value="Polygon">Polygon (MATIC - Testnet Amoy)</option>
                     <option value="BSC">BNB Chain (BEP20)</option>
                 </select>
     

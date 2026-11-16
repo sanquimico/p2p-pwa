@@ -4,7 +4,7 @@ const btnInstall = document.getElementById('btn-install');
 const btnCloseBanner = document.getElementById('btn-close-banner');
 const pwaBadge = document.getElementById('pwa-badge');
 
-// Sistema de Notificaciones Toast (Reemplaza los alert intrusivos)
+// Sistema de Notificaciones Toast
 function showToast(message, isError = false) {
     const container = document.getElementById('toast-container');
     if (!container) return;
@@ -15,7 +15,6 @@ function showToast(message, isError = false) {
     setTimeout(() => toast.remove(), 3000);
 }
 
-// Evento de captura para instalación PWA
 window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredPrompt = e;
@@ -45,9 +44,7 @@ btnCloseBanner.addEventListener('click', () => {
 let orderTimerInterval = null;
 
 function startOrderTimer(durationInSeconds = 60) {
-    if (orderTimerInterval) {
-        clearInterval(orderTimerInterval);
-    }
+    if (orderTimerInterval) clearInterval(orderTimerInterval);
 
     let timer = durationInSeconds;
     const timerDisplay = document.getElementById('timer-display');
@@ -81,10 +78,7 @@ function handleOrderTimeout() {
     const btnDispute = document.getElementById('btn-dispute');
 
     if (statusText) statusText.textContent = 'Orden expirada por tiempo agotado';
-    if (statusBanner) {
-        statusBanner.style.backgroundColor = '#dc3545';
-        statusBanner.style.color = '#fff';
-    }
+    if (statusBanner) { statusBanner.style.backgroundColor = '#dc3545'; statusBanner.style.color = '#fff'; }
     if (btnMarkPaid) { btnMarkPaid.disabled = true; btnMarkPaid.style.opacity = '0.5'; }
     if (btnRelease) { btnRelease.disabled = true; btnRelease.style.opacity = '0.5'; }
     if (btnDispute) { btnDispute.classList.remove('hidden'); }
@@ -125,10 +119,7 @@ function abrirOrdenActiva(datosOferta) {
     const btnDispute = document.getElementById('btn-dispute');
 
     if (statusText) statusText.textContent = 'Esperando depósito / pago...';
-    if (statusBanner) {
-        statusBanner.style.backgroundColor = '#2563eb';
-        statusBanner.style.color = '#fff';
-    }
+    if (statusBanner) { statusBanner.style.backgroundColor = '#2563eb'; statusBanner.style.color = '#fff'; }
     if (btnMarkPaid) { btnMarkPaid.disabled = false; btnMarkPaid.style.opacity = '1'; btnMarkPaid.textContent = 'Ya pagué (Notificar al Vendedor)'; }
     if (btnRelease) { btnRelease.disabled = false; btnRelease.style.opacity = '1'; btnRelease.textContent = 'Liberar USDT (Confirmar Pago)'; }
     if (btnDispute) { btnDispute.classList.add('hidden'); btnDispute.disabled = false; btnDispute.style.opacity = '1'; }
@@ -139,7 +130,6 @@ function abrirOrdenActiva(datosOferta) {
         document.getElementById('order-rate').textContent = `${datosOferta.tasa} Bs / USDT`;
     }
 
-    // Limpiar chat anterior
     const chatMsgs = document.getElementById('chat-messages');
     if (chatMsgs) {
         chatMsgs.innerHTML = `<div style="color: #8b949e; text-align: center; font-style: italic;">Canal cifrado extremo a extremo establecido. Intercambien datos de Pago Móvil de forma segura.</div>`;
@@ -158,7 +148,6 @@ if (btnBack) {
     });
 }
 
-// Lógica del Chat Cifrado simulado en orden activa
 const btnSendChat = document.getElementById('btn-send-chat');
 const chatInput = document.getElementById('chat-input');
 const chatMessages = document.getElementById('chat-messages');
@@ -177,11 +166,8 @@ if (btnSendChat && chatInput && chatMessages) {
     });
 }
 
-// Mock de ofertas y filtrado dinámico real
-const mockOffers = [
-    { id: 1, user: "0x1234...abcd", rep: "100%", ops: "12 ops", amount: "50 USDT", rate: "45.00 Bs", net: "Polygon", type: "sell" },
-    { id: 2, user: "0x5678...ef01", rep: "98%", ops: "45 ops", amount: "100 USDT", rate: "45.20 Bs", net: "BSC", type: "buy" }
-];
+// Lista limpia sin ofertas falsas por defecto
+const mockOffers = [];
 
 function renderOffers() {
     const container = document.getElementById('offers-container');
@@ -190,7 +176,6 @@ function renderOffers() {
     
     const filterNet = document.getElementById('filter-network')?.value || 'all';
 
-    // Filtrado dinámico real por Pestaña (Comprar/Vender) y Red
     const filtered = mockOffers.filter(o => {
         const matchType = (currentTradeType === 'buy') ? (o.type === 'buy') : (o.type === 'sell');
         const matchNet = (filterNet === 'all' || o.net.toLowerCase() === filterNet.toLowerCase());
@@ -198,7 +183,7 @@ function renderOffers() {
     });
 
     if (filtered.length === 0) {
-        container.innerHTML = `<p style="color: #8b949e; font-size: 0.9rem; text-align: center; padding: 20px;">No hay ofertas disponibles para los filtros seleccionados.</p>`;
+        container.innerHTML = `<p style="color: #8b949e; font-size: 0.9rem; text-align: center; padding: 20px;">No hay ofertas publicadas en este momento. Publica una usando el botón superior.</p>`;
         return;
     }
 
@@ -354,7 +339,6 @@ if (formOrder) {
         const typeInput = document.getElementById('modal-order-type').value;
         const networkInput = document.getElementById('modal-order-network').value;
 
-        // Validación de campos en el modal
         if (isNaN(amountInput) || amountInput <= 0) {
             showToast("El monto en USDT debe ser mayor a 0.", true);
             return;
@@ -365,7 +349,7 @@ if (formOrder) {
         }
         
         if (typeof window.ethereum === 'undefined') {
-            showToast("Por favor instala o desbloquea MetaMask.", true);
+            showToast("Por favor instala o desbloquea tu wallet descentralizada.", true);
             return;
         }
 
@@ -429,7 +413,7 @@ if (formOrder) {
 document.addEventListener('DOMContentLoaded', renderOffers);
 
 // ==========================================
-// CONEXIÓN DE WALLET
+// CONEXIÓN DE WALLET (Amplio / Genérico)
 // ==========================================
 const btnConnect = document.getElementById('btn-connect');
 const TARGET_CHAIN_ID = '0x13882';
@@ -456,12 +440,12 @@ if (btnConnect) {
 
                 btnConnect.textContent = `${account.substring(0, 6)}...${account.substring(account.length - 4)}`;
                 btnConnect.style.backgroundColor = '#10b981';
-                showToast("Wallet conectada con éxito.");
+                showToast("Wallet descentralizada conectada con éxito.");
             } catch (error) {
                 showToast("Conexión rechazada por el usuario.", true);
             }
         } else {
-            showToast("No se detectó ninguna wallet Web3.", true);
+            showToast("No se detectó ninguna Web3 Wallet compatible.", true);
         }
     });
 }
