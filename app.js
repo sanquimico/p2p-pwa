@@ -4,6 +4,17 @@ const btnInstall = document.getElementById('btn-install');
 const btnCloseBanner = document.getElementById('btn-close-banner');
 const pwaBadge = document.getElementById('pwa-badge');
 
+// Sistema de Notificaciones Toast (Reemplaza los alert intrusivos)
+function showToast(message, isError = false) {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.className = `toast ${isError ? 'error' : ''}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+
 // Evento de captura para instalación PWA
 window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
@@ -46,7 +57,6 @@ function startOrderTimer(durationInSeconds = 60) {
 
     orderTimerInterval = setInterval(() => {
         timer--;
-
         if (timer >= 0) {
             updateTimerUI(timer, timerDisplay);
         } else {
@@ -60,11 +70,7 @@ function startOrderTimer(durationInSeconds = 60) {
 function updateTimerUI(seconds, element) {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = seconds % 60;
-
-    const formattedMinutes = String(minutes).padStart(2, '0');
-    const formattedSeconds = String(remainingSeconds).padStart(2, '0');
-
-    element.textContent = `${formattedMinutes}:${formattedSeconds}`;
+    element.textContent = `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
 }
 
 function handleOrderTimeout() {
@@ -79,20 +85,12 @@ function handleOrderTimeout() {
         statusBanner.style.backgroundColor = '#dc3545';
         statusBanner.style.color = '#fff';
     }
-    if (btnMarkPaid) {
-        btnMarkPaid.disabled = true;
-        btnMarkPaid.style.opacity = '0.5';
-    }
-    if (btnRelease) {
-        btnRelease.disabled = true;
-        btnRelease.style.opacity = '0.5';
-    }
-    if (btnDispute) {
-        btnDispute.classList.remove('hidden');
-    }
+    if (btnMarkPaid) { btnMarkPaid.disabled = true; btnMarkPaid.style.opacity = '0.5'; }
+    if (btnRelease) { btnRelease.disabled = true; btnRelease.style.opacity = '0.5'; }
+    if (btnDispute) { btnDispute.classList.remove('hidden'); }
 
     registrarEnHistorial("Expirada");
-    alert('El tiempo límite para realizar el pago ha expirado.');
+    showToast('El tiempo límite para realizar el pago ha expirado.', true);
 }
 
 function stopOrderTimer() {
@@ -103,7 +101,7 @@ function stopOrderTimer() {
 }
 
 // ==========================================
-// CONTROL DE VISTAS: ORDEN ACTIVA & HISTORIAL
+// CONTROL DE VISTAS: ORDEN ACTIVA, CHAT & HISTORIAL
 // ==========================================
 const offersContainer = document.getElementById('offers-container');
 const tradeTabsSection = document.querySelector('.trade-tabs');
@@ -131,26 +129,20 @@ function abrirOrdenActiva(datosOferta) {
         statusBanner.style.backgroundColor = '#2563eb';
         statusBanner.style.color = '#fff';
     }
-    if (btnMarkPaid) {
-        btnMarkPaid.disabled = false;
-        btnMarkPaid.style.opacity = '1';
-        btnMarkPaid.textContent = 'Ya pagué (Notificar al Vendedor)';
-    }
-    if (btnRelease) {
-        btnRelease.disabled = false;
-        btnRelease.style.opacity = '1';
-        btnRelease.textContent = 'Liberar USDT (Confirmar Pago)';
-    }
-    if (btnDispute) {
-        btnDispute.classList.add('hidden');
-        btnDispute.disabled = false;
-        btnDispute.style.opacity = '1';
-    }
+    if (btnMarkPaid) { btnMarkPaid.disabled = false; btnMarkPaid.style.opacity = '1'; btnMarkPaid.textContent = 'Ya pagué (Notificar al Vendedor)'; }
+    if (btnRelease) { btnRelease.disabled = false; btnRelease.style.opacity = '1'; btnRelease.textContent = 'Liberar USDT (Confirmar Pago)'; }
+    if (btnDispute) { btnDispute.classList.add('hidden'); btnDispute.disabled = false; btnDispute.style.opacity = '1'; }
 
     if (datosOferta) {
         document.getElementById('order-fiat-amount').textContent = `${datosOferta.montoFiat} Bs`;
         document.getElementById('order-crypto-amount').textContent = `${datosOferta.montoCrypto} USDT`;
         document.getElementById('order-rate').textContent = `${datosOferta.tasa} Bs / USDT`;
+    }
+
+    // Limpiar chat anterior
+    const chatMsgs = document.getElementById('chat-messages');
+    if (chatMsgs) {
+        chatMsgs.innerHTML = `<div style="color: #8b949e; text-align: center; font-style: italic;">Canal cifrado extremo a extremo establecido. Intercambien datos de Pago Móvil de forma segura.</div>`;
     }
 
     startOrderTimer(60);
@@ -166,19 +158,51 @@ if (btnBack) {
     });
 }
 
-const mockOffers = [];
+// Lógica del Chat Cifrado simulado en orden activa
+const btnSendChat = document.getElementById('btn-send-chat');
+const chatInput = document.getElementById('chat-input');
+const chatMessages = document.getElementById('chat-messages');
+
+if (btnSendChat && chatInput && chatMessages) {
+    btnSendChat.addEventListener('click', () => {
+        const text = chatInput.value.trim();
+        if (!text) return;
+        const msgDiv = document.createElement('div');
+        msgDiv.className = "chat-message me";
+        msgDiv.textContent = `Tú: ${text}`;
+        chatMessages.appendChild(msgDiv);
+        chatInput.value = "";
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        showToast("Mensaje cifrado enviado con éxito.");
+    });
+}
+
+// Mock de ofertas y filtrado dinámico real
+const mockOffers = [
+    { id: 1, user: "0x1234...abcd", rep: "100%", ops: "12 ops", amount: "50 USDT", rate: "45.00 Bs", net: "Polygon", type: "sell" },
+    { id: 2, user: "0x5678...ef01", rep: "98%", ops: "45 ops", amount: "100 USDT", rate: "45.20 Bs", net: "BSC", type: "buy" }
+];
 
 function renderOffers() {
     const container = document.getElementById('offers-container');
     if (!container) return;
     container.innerHTML = "";
     
-    if (mockOffers.length === 0) {
-        container.innerHTML = `<p style="color: #8b949e; font-size: 0.9rem; text-align: center; padding: 20px;">No hay ofertas publicadas en este momento. Publica una usando el botón superior.</p>`;
+    const filterNet = document.getElementById('filter-network')?.value || 'all';
+
+    // Filtrado dinámico real por Pestaña (Comprar/Vender) y Red
+    const filtered = mockOffers.filter(o => {
+        const matchType = (currentTradeType === 'buy') ? (o.type === 'buy') : (o.type === 'sell');
+        const matchNet = (filterNet === 'all' || o.net.toLowerCase() === filterNet.toLowerCase());
+        return matchType && matchNet;
+    });
+
+    if (filtered.length === 0) {
+        container.innerHTML = `<p style="color: #8b949e; font-size: 0.9rem; text-align: center; padding: 20px;">No hay ofertas disponibles para los filtros seleccionados.</p>`;
         return;
     }
 
-    mockOffers.forEach(o => {
+    filtered.forEach(o => {
         const card = document.createElement('div');
         card.className = "card-offer";
         card.innerHTML = `
@@ -230,7 +254,6 @@ function renderHistory() {
 
 function registrarEnHistorial(estado) {
     if (!currentActiveOrder) return;
-
     let colorStatus = "#10b981"; 
     if (estado === "Expirada" || estado === "Disputa") colorStatus = "#dc3545"; 
 
@@ -245,7 +268,6 @@ function registrarEnHistorial(estado) {
         color: colorStatus,
         fecha: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     });
-
     renderHistory();
 }
 
@@ -256,49 +278,46 @@ function initTrade(id) {
     const montoCryptoNum = parseFloat(oferta.amount.replace(/[^0-9.]/g, ''));
     const tasaNum = parseFloat(oferta.rate.replace(/[^0-9.]/g, ''));
     
-    const montoFiatTotal = (!isNaN(montoCryptoNum) && !isNaN(tasaNum)) 
-        ? (montoCryptoNum * tasaNum).toFixed(2) 
-        : "0.00";
-
-    const datosOferta = {
-        montoFiat: montoFiatTotal,
-        montoCrypto: !isNaN(montoCryptoNum) ? montoCryptoNum.toFixed(2) : "0.00",
-        tasa: !isNaN(tasaNum) ? tasaNum.toFixed(2) : "0.00"
-    };
+    const montoFiatTotal = (!isNaN(montoCryptoNum) && !isNaN(tasaNum)) ? (montoCryptoNum * tasaNum).toFixed(2) : "0.00";
 
     currentActiveOrder = {
         id: oferta.id,
         user: oferta.user,
         net: oferta.net,
-        montoCrypto: datosOferta.montoCrypto,
-        montoFiat: datosOferta.montoFiat,
-        tasa: datosOferta.tasa
+        montoCrypto: !isNaN(montoCryptoNum) ? montoCryptoNum.toFixed(2) : "0.00",
+        montoFiat: montoFiatTotal,
+        tasa: !isNaN(tasaNum) ? tasaNum.toFixed(2) : "0.00"
     };
 
-    abrirOrdenActiva(datosOferta);
+    abrirOrdenActiva(currentActiveOrder);
 }
 
 // ==========================================
-// CONTROL DE PESTAÑAS Y MODAL (Sincronizado)
+// CONTROL DE PESTAÑAS, FILTROS Y MODAL
 // ==========================================
 const tabBuy = document.getElementById('tab-buy');
 const tabSell = document.getElementById('tab-sell');
-let currentTradeType = 'buy'; // Inicia en Comprar según HTML por defecto
+let currentTradeType = 'buy'; 
 
 if (tabBuy && tabSell) {
     tabBuy.addEventListener('click', () => {
         tabBuy.classList.add('active');
         tabSell.classList.remove('active');
         currentTradeType = 'buy';
-        console.log("Cambiado a vista: Comprar USDT");
+        renderOffers();
     });
 
     tabSell.addEventListener('click', () => {
         tabSell.classList.add('active');
         tabBuy.classList.remove('active');
         currentTradeType = 'sell';
-        console.log("Cambiado a vista: Vender USDT");
+        renderOffers();
     });
+}
+
+const filterNetwork = document.getElementById('filter-network');
+if (filterNetwork) {
+    filterNetwork.addEventListener('change', renderOffers);
 }
 
 const modal = document.getElementById('modal-order');
@@ -308,19 +327,12 @@ const btnCancelModal = document.getElementById('btn-cancel-modal');
 if (btnNewOrder && modal) {
     btnNewOrder.addEventListener('click', () => {
         modal.classList.remove('hidden');
-
-        // Sincronizar automáticamente el Tipo de Operación
         const selectOperation = document.getElementById('modal-order-type');
-        if (selectOperation) {
-            selectOperation.value = currentTradeType; // 'buy' o 'sell'
-        }
-
-        // Sincronizar automáticamente la Red según el filtro
-        const filterNetwork = document.getElementById('filter-network');
+        if (selectOperation) selectOperation.value = currentTradeType;
+        
         const modalNetwork = document.getElementById('modal-order-network');
         if (filterNetwork && modalNetwork && filterNetwork.value !== 'all') {
-            const netVal = filterNetwork.value;
-            modalNetwork.value = (netVal === 'polygon') ? 'Polygon' : 'BSC';
+            modalNetwork.value = filterNetwork.value;
         }
     });
 }
@@ -330,27 +342,38 @@ if (btnCancelModal && modal) {
 }
 
 // ==========================================
-// FORMULARIO Y CONTRATO INTELIGENTE
+// FORMULARIO Y VALIDACIÓN DEL MODAL
 // ==========================================
 const formOrder = document.getElementById('form-order');
 if (formOrder) {
     formOrder.addEventListener('submit', async (e) => {
         e.preventDefault();
         
-        const amountInput = document.getElementById('modal-order-amount').value;
-        const rateInput = document.getElementById('modal-order-rate').value;
+        const amountInput = parseFloat(document.getElementById('modal-order-amount').value);
+        const rateInput = parseFloat(document.getElementById('modal-order-rate').value);
+        const typeInput = document.getElementById('modal-order-type').value;
         const networkInput = document.getElementById('modal-order-network').value;
+
+        // Validación de campos en el modal
+        if (isNaN(amountInput) || amountInput <= 0) {
+            showToast("El monto en USDT debe ser mayor a 0.", true);
+            return;
+        }
+        if (isNaN(rateInput) || rateInput <= 0) {
+            showToast("La tasa de cambio debe ser válida.", true);
+            return;
+        }
         
         if (typeof window.ethereum === 'undefined') {
-            alert("Por favor instala o desbloquea MetaMask.");
+            showToast("Por favor instala o desbloquea MetaMask.", true);
             return;
         }
 
         try {
             const provider = new ethers.providers.Web3Provider(window.ethereum);
             const signer = provider.getSigner();
-
             const contractAddress = "0xfcfc88bdff4B9493F300E6e093785432d6B1a392";
+            
             const contractABI = [
                 {
                     "inputs": [
@@ -361,53 +384,20 @@ if (formOrder) {
                     "outputs": [],
                     "stateMutability": "payable",
                     "type": "function"
-                },
-                {
-                    "anonymous": false,
-                    "inputs": [
-                        { "indexed": true, "internalType": "uint256", "name": "id", "type": "uint256" },
-                        { "indexed": true, "internalType": "address", "name": "vendedor", "type": "address" },
-                        { "indexed": false, "internalType": "uint256", "name": "montoCrypto", "type": "uint256" },
-                        { "indexed": false, "internalType": "uint256", "name": "tasa", "type": "uint256" }
-                    ],
-                    "name": "OfertaCreada",
-                    "type": "event"
-                },
-                {
-                    "inputs": [],
-                    "name": "contadorOfertas",
-                    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
-                    "stateMutability": "view",
-                    "type": "function"
-                },
-                {
-                    "inputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
-                    "name": "ofertas",
-                    "outputs": [
-                        { "internalType": "address payable", "name": "vendedor", "type": "address" },
-                        { "internalType": "uint256", "name": "montoCrypto", "type": "uint256" },
-                        { "internalType": "uint256", "name": "tasa", "type": "uint256" },
-                        { "internalType": "bool", "name": "activa", "type": "bool" }
-                    ],
-                    "stateMutability": "view",
-                    "type": "function"
                 }
             ];
 
             const escrowContract = new ethers.Contract(contractAddress, contractABI, signer);
+            const montoParseado = ethers.utils.parseUnits(amountInput.toString(), 6); 
+            const tasaParseada = ethers.utils.parseUnits(rateInput.toString(), 18);
 
-            const montoParseado = ethers.utils.parseUnits(amountInput, 6); 
-            const tasaParseada = ethers.utils.parseUnits(rateInput, 18);
-
-            console.log("Enviando transacción al contrato inteligente...");
+            showToast("Enviando transacción a la red Amoy...");
             const tx = await escrowContract.crearOferta(montoParseado, tasaParseada, {
                 value: ethers.utils.parseEther("0.001") 
             });
 
-            alert("Transacción enviada. Esperando confirmación en la red Amoy...");
-            
+            showToast("Esperando confirmación en la blockchain...");
             const receipt = await tx.wait();
-            console.log("¡Transacción confirmada!", receipt.transactionHash);
 
             const accounts = await window.ethereum.request({ method: 'eth_accounts' });
             const userAddress = accounts[0] || "0x0000...0000";
@@ -419,18 +409,19 @@ if (formOrder) {
                 ops: "1 op",
                 rep: "100%",
                 amount: `${amountInput} USDT`,
-                rate: `${rateInput} Bs`,
-                net: networkInput
+                rate: `${rateInput.toFixed(2)} Bs`,
+                net: networkInput,
+                type: typeInput
             });
             
             renderOffers();
             modal.classList.add('hidden');
             e.target.reset();
-            alert("¡Oferta publicada exitosamente en la blockchain!");
+            showToast("¡Oferta publicada exitosamente en la blockchain!");
 
         } catch (error) {
-            console.error("Error al interactuar con el contrato:", error);
-            alert("La transacción fue cancelada o falló: " + (error.reason || error.message));
+            console.error(error);
+            showToast("La transacción falló o fue cancelada.", true);
         }
     });
 }
@@ -438,10 +429,10 @@ if (formOrder) {
 document.addEventListener('DOMContentLoaded', renderOffers);
 
 // ==========================================
-// CONEXIÓN REAL DE WALLET & CAMBIO DE RED
+// CONEXIÓN DE WALLET
 // ==========================================
 const btnConnect = document.getElementById('btn-connect');
-const TARGET_CHAIN_ID = '0x13882'; // Polygon Amoy Testnet
+const TARGET_CHAIN_ID = '0x13882';
 
 if (btnConnect) {
     btnConnect.addEventListener('click', async () => {
@@ -449,7 +440,6 @@ if (btnConnect) {
             try {
                 const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
                 const account = accounts[0];
-                
                 const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
                 
                 if (currentChainId !== TARGET_CHAIN_ID) {
@@ -459,99 +449,36 @@ if (btnConnect) {
                             params: [{ chainId: TARGET_CHAIN_ID }],
                         });
                     } catch (switchError) {
-                        console.error("Error al cambiar de red:", switchError);
-                        alert("Por favor, cambia manualmente a la red correcta en tu wallet.");
+                        showToast("Cambia manualmente a Polygon Amoy en tu wallet.", true);
                         return;
                     }
                 }
 
-                const shortAccount = `${account.substring(0, 6)}...${account.substring(account.length - 4)}`;
-                btnConnect.textContent = shortAccount;
+                btnConnect.textContent = `${account.substring(0, 6)}...${account.substring(account.length - 4)}`;
                 btnConnect.style.backgroundColor = '#10b981';
-                btnConnect.style.borderColor = '#10b981';
-                
-                console.log("Wallet conectada y en red correcta:", account);
+                showToast("Wallet conectada con éxito.");
             } catch (error) {
-                console.error("El usuario rechazó la conexión de la wallet:", error);
-                alert("No se pudo conectar la wallet. Asegúrate de aprobar la solicitud.");
+                showToast("Conexión rechazada por el usuario.", true);
             }
         } else {
-            alert("No se detectó ninguna wallet Web3 (como MetaMask). Por favor instala una para conectar.");
+            showToast("No se detectó ninguna wallet Web3.", true);
         }
     });
 }
 
 // ==========================================
-// GESTIÓN DE ACTUALIZACIONES PWA
-// ==========================================
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').then((reg) => {
-        if (reg.waiting) {
-            mostrarAvisoActualizacion(reg);
-            return;
-        }
-
-        reg.addEventListener('updatefound', () => {
-            const newWorker = reg.installing;
-            newWorker.addEventListener('statechange', () => {
-                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                    mostrarAvisoActualizacion(reg);
-                }
-            });
-        });
-    });
-
-    let refreshing = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (refreshing) return;
-        refreshing = true;
-        window.location.reload();
-    });
-}
-
-function mostrarAvisoActualizacion(reg) {
-    if (document.getElementById('update-toast')) return;
-
-    const toast = document.createElement('div');
-    toast.id = 'update-toast';
-    toast.innerHTML = `
-        <div style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1f2937; color: #fff; padding: 12px 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); display: flex; align-items: center; gap: 15px; z-index: 9999; border: 1px solid #374151; font-family: sans-serif; font-size: 14px;">
-            <span>¡Nueva versión de P2P Escrow disponible!</span>
-            <button id="btn-update-app" style="background: #10b981; color: white; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-weight: bold;">Actualizar</button>
-        </div>
-    `;
-    document.body.appendChild(toast);
-
-    document.getElementById('btn-update-app').addEventListener('click', () => {
-        if (reg.waiting) {
-            reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-        }
-    });
-}
-
-// ==========================================
-// ACCIONES DE ORDEN (COMPRADOR Y VENDEDOR)
+// ACCIONES DE ORDEN
 // ==========================================
 function marcarComoPagado() {
     stopOrderTimer();
     const statusText = document.getElementById('order-status-text');
     const statusBanner = document.querySelector('.order-status-banner');
     const btnMarkPaid = document.getElementById('btn-mark-paid');
-    const timerDisplay = document.getElementById('timer-display');
-
+    
     if (statusText) statusText.textContent = 'Pago realizado. Esperando confirmación del vendedor...';
-    if (statusBanner) {
-        statusBanner.style.backgroundColor = '#d97706';
-        statusBanner.style.color = '#fff';
-    }
-    if (btnMarkPaid) {
-        btnMarkPaid.disabled = true;
-        btnMarkPaid.style.opacity = '0.5';
-        btnMarkPaid.textContent = 'Pago Notificado';
-    }
-    if (timerDisplay) timerDisplay.textContent = 'PAGADO';
-
-    alert('Has notificado el pago. El vendedor verificará sus cuentas para liberar los USDT.');
+    if (statusBanner) { statusBanner.style.backgroundColor = '#d97706'; }
+    if (btnMarkPaid) { btnMarkPaid.disabled = true; btnMarkPaid.style.opacity = '0.5'; }
+    showToast("Pago notificado al vendedor.");
 }
 
 function liberarFondos() {
@@ -560,52 +487,18 @@ function liberarFondos() {
     const statusBanner = document.querySelector('.order-status-banner');
     const btnMarkPaid = document.getElementById('btn-mark-paid');
     const btnRelease = document.getElementById('btn-release-funds');
-    const timerDisplay = document.getElementById('timer-display');
-
-    if (statusText) statusText.textContent = '¡Orden completada con éxito! USDT liberados al comprador.';
-    if (statusBanner) {
-        statusBanner.style.backgroundColor = '#10b981';
-        statusBanner.style.color = '#fff';
-    }
-    if (btnMarkPaid) {
-        btnMarkPaid.disabled = true;
-        btnMarkPaid.style.opacity = '0.5';
-    }
-    if (btnRelease) {
-        btnRelease.disabled = true;
-        btnRelease.style.opacity = '0.5';
-        btnRelease.textContent = 'USDT Liberados';
-    }
-    if (timerDisplay) timerDisplay.textContent = 'COMPLETADO';
+    
+    if (statusText) statusText.textContent = '¡Orden completada! USDT liberados.';
+    if (statusBanner) { statusBanner.style.backgroundColor = '#10b981'; }
+    if (btnMarkPaid) btnMarkPaid.disabled = true;
+    if (btnRelease) { btnRelease.disabled = true; btnRelease.style.opacity = '0.5'; }
 
     registrarEnHistorial("Completado");
-    alert('¡Fondos liberados exitosamente! La orden ha finalizado.');
-}
-
-function abrirDisputaOrden() {
-    stopOrderTimer();
-    const statusText = document.getElementById('order-status-text');
-    const statusBanner = document.querySelector('.order-status-banner');
-    const btnDispute = document.getElementById('btn-dispute');
-
-    if (statusText) statusText.textContent = 'Disputa abierta. Soporte intervendrá en la orden.';
-    if (statusBanner) {
-        statusBanner.style.backgroundColor = '#dc3545';
-        statusBanner.style.color = '#fff';
-    }
-    if (btnDispute) {
-        btnDispute.disabled = true;
-        btnDispute.style.opacity = '0.5';
-    }
-
-    registrarEnHistorial("Disputa");
-    alert('Se ha abierto una disputa. Un moderador revisará el caso.');
+    showToast("¡Fondos liberados exitosamente!");
 }
 
 const btnMarkPaid = document.getElementById('btn-mark-paid');
 const btnReleaseFunds = document.getElementById('btn-release-funds');
-const btnDispute = document.getElementById('btn-dispute');
 
 if (btnMarkPaid) btnMarkPaid.addEventListener('click', marcarComoPagado);
 if (btnReleaseFunds) btnReleaseFunds.addEventListener('click', liberarFondos);
-if (btnDispute) btnDispute.addEventListener('click', abrirDisputaOrden);

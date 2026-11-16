@@ -9,6 +9,9 @@
     <meta name="theme-color" content="#0d1117">
 </head>
 <body>
+    <!-- Contenedor global de Notificaciones Toast -->
+    <div id="toast-container" class="toast-container"></div>
+
     <!-- Banner de Instalación PWA -->
     <div id="pwa-banner" class="pwa-banner hidden">
         <div class="banner-content">
@@ -30,6 +33,18 @@
     </header>
 
     <main class="container">
+        <!-- Sección Explicativa / Ventajas de la PWA -->
+        <section class="info-guide-section" style="background: var(--card-bg); border: 1px solid var(--border-color); padding: 12px 15px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85rem; color: var(--text-muted);">
+            <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="document.getElementById('guide-content').classList.toggle('hidden')">
+                <strong style="color: var(--text-main);">💡 ¿Cómo funciona el Escrow P2P y sus Ventajas? [Ver Guía]</strong>
+                <span>▼</span>
+            </div>
+            <div id="guide-content" class="hidden" style="margin-top: 10px; line-height: 1.4;">
+                <p><strong>Ventajas:</strong> Custodia descentralizada en Smart Contract, cero comisiones de intermediarios centralizados, chat cifrado privado para datos de Pago Móvil y total soberanía de tus fondos.</p>
+                <p style="margin-top: 6px;"><strong>Cómo usar:</strong> 1. Conecta tu MetaMask (Red Polygon Amoy). 2. Publica o toma una oferta en Comprar/Vender. 3. Usa el chat privado cifrado para coordinar el pago. 4. Libera los USDT una vez verificado el dinero en tu banco.</p>
+            </div>
+        </section>
+
         <!-- Selector de Modo -->
         <section class="trade-tabs">
             <button id="tab-buy" class="tab-btn active">Comprar USDT</button>
@@ -40,8 +55,8 @@
         <section class="filters">
             <select id="filter-network" class="input-select">
                 <option value="all">Todas las Redes</option>
-                <option value="polygon">Polygon (MATIC)</option>
-                <option value="bsc">BNB Chain (BEP20)</option>
+                <option value="Polygon">Polygon (MATIC)</option>
+                <option value="BSC">BNB Chain (BEP20)</option>
             </select>
             <button id="btn-new-order" class="btn-secondary">+ Publicar Oferta</button>
         </section>
@@ -59,7 +74,7 @@
             </div>
         </section>
 
-        <!-- VISTA DE ORDEN ACTIVA (Oculta por defecto) -->
+        <!-- VISTA DE ORDEN ACTIVA & CHAT PRIVADO (Oculta por defecto) -->
         <div id="order-view" class="order-container hidden">
             <div class="order-header">
                 <button id="btn-back" class="btn-secondary">← Volver</button>
@@ -89,26 +104,25 @@
         
                 <hr class="divider" />
         
-                <h3>Datos de Pago Móvil del Vendedor</h3>
-                <div class="payment-details-box">
-                    <p><strong>Banco:</strong> <span id="pay-bank">Banesco (0134)</span></p>
-                    <p><strong>Cédula / RIF:</strong> <span id="pay-id">V-12345678</span></p>
-                    <p><strong>Teléfono:</strong> <span id="pay-phone">0412-1234567</span></p>
-                    <p><strong>Concepto sugerido:</strong> <span id="pay-ref">ORD-#1042</span></p>
+                <!-- Canal de Comunicación Privado y Cifrado (Chat P2P) -->
+                <h3>💬 Chat Privado Cifrado (Pago Móvil / Wallet)</h3>
+                <div class="chat-box" style="background: #141721; border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; margin: 10px 0;">
+                    <div id="chat-messages" style="max-height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; font-size: 0.85rem; margin-bottom: 10px; padding-right: 5px;">
+                        <div style="color: #8b949e; text-align: center; font-style: italic;">Canal cifrado extremo a extremo establecido. Intercambien datos de Pago Móvil de forma segura.</div>
+                    </div>
+                    <div style="display: flex; gap: 5px;">
+                        <input type="text" id="chat-input" placeholder="Ej: Banco Banesco, C.I V-..., Tlf..." class="input-text" style="margin-bottom: 0; font-size: 0.85rem;" />
+                        <button type="button" id="btn-send-chat" class="btn-primary-sm">Enviar</button>
+                    </div>
                 </div>
-        
+
                 <div class="order-actions">
-                    <!-- Botón para el Comprador -->
                     <button id="btn-mark-paid" class="btn-action btn-pay">
                         Ya pagué (Notificar al Vendedor)
                     </button>
-                
-                    <!-- Botón para el Vendedor (Liberar Fondos) -->
-                    <button id="btn-release-funds" class="btn-action btn-success">
+                    <button id="btn-release-funds" class="btn-action btn-success" style="background-color: #10b981; color: #fff;">
                         Liberar USDT (Confirmar Pago)
                     </button>
-
-                    <!-- Botón para abrir Disputa -->
                     <button id="btn-dispute" class="btn-action btn-danger hidden">
                         Abrir Disputa
                     </button>
@@ -134,7 +148,7 @@
                 </select>
     
                 <label>Monto USDT</label>
-                <input type="number" id="modal-order-amount" placeholder="Ej: 20" required class="input-text">
+                <input type="number" step="any" id="modal-order-amount" placeholder="Ej: 20" required class="input-text">
     
                 <label>Tasa sugerida (Bs / USDT)</label>
                 <input type="number" step="0.01" id="modal-order-rate" placeholder="Ej: 45.50" required class="input-text">
@@ -150,7 +164,6 @@
     <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
     <script src="app.js"></script>
     <script>
-        // Registro del Service Worker
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('./sw.js')
                 .then(reg => console.log('Service Worker registrado con éxito', reg))

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'p2p-escrow-v5'; // Sube la versión aquí
+const CACHE_NAME = 'p2p-escrow-v6'; // Sube la versión aquí
 const assetsToCache = [
   './',
   './index.html',
