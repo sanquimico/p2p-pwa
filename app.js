@@ -4,6 +4,8 @@ const btnInstall = document.getElementById('btn-install');
 const btnCloseBanner = document.getElementById('btn-close-banner');
 const pwaBadge = document.getElementById('pwa-badge');
 
+const TARGET_CHAIN_ID = '0x13882'; // Polygon Amoy Testnet (80002)
+
 // Sistema de Notificaciones Toast
 function showToast(message, isError = false) {
     const container = document.getElementById('toast-container');
@@ -12,31 +14,37 @@ function showToast(message, isError = false) {
     toast.className = `toast ${isError ? 'error' : ''}`;
     toast.textContent = message;
     container.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
+    setTimeout(() => toast.remove(), 3500);
 }
 
 window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredPrompt = e;
-    pwaBanner.classList.remove('hidden');
+    if (pwaBanner) pwaBanner.classList.remove('hidden');
 });
 
-btnInstall.addEventListener('click', async () => {
-    if (deferredPrompt) {
-        deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
-        if (outcome === 'accepted') {
-            pwaBanner.classList.add('hidden');
-            pwaBadge.textContent = "PWA Instalada";
-            pwaBadge.style.color = "#10b981";
+if (btnInstall) {
+    btnInstall.addEventListener('click', async () => {
+        if (deferredPrompt) {
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            if (outcome === 'accepted') {
+                if (pwaBanner) pwaBanner.classList.add('hidden');
+                if (pwaBadge) {
+                    pwaBadge.textContent = "PWA Instalada";
+                    pwaBadge.style.color = "#10b981";
+                }
+            }
+            deferredPrompt = null;
         }
-        deferredPrompt = null;
-    }
-});
+    });
+}
 
-btnCloseBanner.addEventListener('click', () => {
-    pwaBanner.classList.add('hidden');
-});
+if (btnCloseBanner) {
+    btnCloseBanner.addEventListener('click', () => {
+        if (pwaBanner) pwaBanner.classList.add('hidden');
+    });
+}
 
 // ==========================================
 // CONTROL DEL TEMPORIZADOR DE LA ORDEN
@@ -316,8 +324,13 @@ if (btnNewOrder && modal) {
         if (selectOperation) selectOperation.value = currentTradeType;
         
         const modalNetwork = document.getElementById('modal-order-network');
-        if (filterNetwork && modalNetwork && filterNetwork.value !== 'all') {
-            modalNetwork.value = filterNetwork.value;
+        if (modalNetwork) {
+            if (filterNetwork && filterNetwork.value !== 'all') {
+                modalNetwork.value = filterNetwork.value;
+            } else {
+                // Por defecto selecciona Polygon para evitar errores de red
+                modalNetwork.value = 'Polygon';
+            }
         }
     });
 }
@@ -327,7 +340,7 @@ if (btnCancelModal && modal) {
 }
 
 // ==========================================
-// FORMULARIO Y VALIDACIÓN DEL MODAL
+// FORMULARIO, VALIDACIÓN DE RED Y CONTRATO
 // ==========================================
 const formOrder = document.getElementById('form-order');
 if (formOrder) {
@@ -347,13 +360,27 @@ if (formOrder) {
             showToast("La tasa de cambio debe ser válida.", true);
             return;
         }
-        
         if (typeof window.ethereum === 'undefined') {
             showToast("Por favor instala o desbloquea tu wallet descentralizada.", true);
             return;
         }
 
+        // Validación de coherencia entre la red elegida en el modal y la wallet
+        if (networkInput !== 'Polygon') {
+            showToast("El contrato de prueba está desplegado en Polygon Amoy. Selecciona Polygon.", true);
+            return;
+        }
+
         try {
+            const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
+            if (currentChainId !== TARGET_CHAIN_ID) {
+                showToast("Cambiando tu wallet a Polygon Amoy Testnet...");
+                await window.ethereum.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: TARGET_CHAIN_ID }],
+                });
+            }
+
             const provider = new ethers.providers.Web3Provider(window.ethereum);
             const signer = provider.getSigner();
             const contractAddress = "0xfcfc88bdff4B9493F300E6e093785432d6B1a392";
@@ -375,13 +402,17 @@ if (formOrder) {
             const montoParseado = ethers.utils.parseUnits(amountInput.toString(), 6); 
             const tasaParseada = ethers.utils.parseUnits(rateInput.toString(), 18);
 
-            showToast("Enviando transacción a la red Amoy...");
+            showToast("Confirma la transacción en tu wallet...");
+
+            // Se especifica gas mínimo exigido por Polygon Amoy (>= 25 Gwei)
             const tx = await escrowContract.crearOferta(montoParseado, tasaParseada, {
-                value: ethers.utils.parseEther("0.001") 
+                value: ethers.utils.parseEther("0.001"),
+                maxPriorityFeePerGas: ethers.utils.parseUnits("30", "gwei"),
+                maxFeePerGas: ethers.utils.parseUnits("35", "gwei")
             });
 
-            showToast("Esperando confirmación en la blockchain...");
-            const receipt = await tx.wait();
+            showToast("Transacción enviada. Esperando confirmación en Amoy...");
+            await tx.wait();
 
             const accounts = await window.ethereum.request({ method: 'eth_accounts' });
             const userAddress = accounts[0] || "0x0000...0000";
@@ -404,8 +435,12 @@ if (formOrder) {
             showToast("¡Oferta publicada exitosamente en la blockchain!");
 
         } catch (error) {
-            console.error(error);
-            showToast("La transacción falló o fue cancelada.", true);
+            console.error("Detalle del error:", error);
+            if (error.code === 4001) {
+                showToast("Transacción rechazada en la wallet.", true);
+            } else {
+                showToast("Error en blockchain: verifica saldo POL de prueba o gas.", true);
+            }
         }
     });
 }
@@ -416,7 +451,6 @@ document.addEventListener('DOMContentLoaded', renderOffers);
 // CONEXIÓN DE WALLET (Amplio / Genérico)
 // ==========================================
 const btnConnect = document.getElementById('btn-connect');
-const TARGET_CHAIN_ID = '0x13882';
 
 if (btnConnect) {
     btnConnect.addEventListener('click', async () => {
