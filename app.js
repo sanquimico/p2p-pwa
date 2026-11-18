@@ -5,7 +5,9 @@ const btnCloseBanner = document.getElementById('btn-close-banner');
 const pwaBadge = document.getElementById('pwa-badge');
 
 const TARGET_CHAIN_ID = '0x13882'; // Polygon Amoy Testnet (80002)
-const CONTRACT_ADDRESS = "0xFA8B987165D10a3C03d8008DD946707fC89346E6";
+
+// Dirección actualizada del Smart Contract desplegado hoy en Amoy
+const CONTRACT_ADDRESS = "0x1921e2b9c1bf2388d9deb566fe5e11fefa14fe5c";
 
 const CONTRACT_ABI = [
     {
@@ -28,6 +30,13 @@ const CONTRACT_ABI = [
     {
         "inputs": [{ "internalType": "uint256", "name": "_id", "type": "uint256" }],
         "name": "liberarFondos",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [{ "internalType": "uint256", "name": "_id", "type": "uint256" }],
+        "name": "abrirDisputa",
         "outputs": [],
         "stateMutability": "nonpayable",
         "type": "function"
@@ -57,8 +66,16 @@ const CONTRACT_ABI = [
             { "internalType": "uint256", "name": "montoCrypto", "type": "uint256" },
             { "internalType": "uint256", "name": "tasa", "type": "uint256" },
             { "internalType": "bool", "name": "activa", "type": "bool" },
-            { "internalType": "bool", "name": "completada", "type": "bool" }
+            { "internalType": "bool", "name": "completada", "type": "bool" },
+            { "internalType": "bool", "name": "enDisputa", "type": "bool" }
         ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [{ "internalType": "address", "name": "", "type": "address" }],
+        "name": "listaNegra",
+        "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
         "stateMutability": "view",
         "type": "function"
     }
@@ -385,7 +402,6 @@ async function initTrade(id) {
     const accounts = await window.ethereum.request({ method: 'eth_accounts' });
     const currentAccount = (accounts[0] || "").toLowerCase();
 
-    // Si quien hace clic es un comprador distinto al vendedor y la orden aún no tiene comprador en blockchain, llama a tomarOferta()
     if (
         currentAccount &&
         currentAccount !== oferta.vendedorFull.toLowerCase() &&
@@ -525,7 +541,6 @@ if (formOrder) {
 
             showToast("Confirma la garantía en tu wallet...");
 
-            // Se deposita 0.01 POL de prueba para visualizar claramente el cobro del 1% al liberar
             const tx = await escrowContract.crearOferta(montoParseado, tasaParseada, {
                 value: ethers.utils.parseEther("0.01"),
                 ...AMOY_GAS_OVERRIDES
@@ -553,7 +568,7 @@ if (formOrder) {
 document.addEventListener('DOMContentLoaded', cargarOfertasBlockchain);
 
 // ==========================================
-// CONEXIÓN DE WALLET (Amplio / Genérico)
+// CONEXIÓN DE WALLET
 // ==========================================
 const btnConnect = document.getElementById('btn-connect');
 
@@ -591,7 +606,7 @@ if (btnConnect) {
 }
 
 // ==========================================
-// ACCIONES DE ORDEN (CON LIBERACIÓN Y COMISIÓN ON-CHAIN)
+// ACCIONES DE ORDEN & DISPUTAS
 // ==========================================
 function marcarComoPagado() {
     stopOrderTimer();
@@ -615,7 +630,6 @@ async function liberarFondos() {
             const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
             const ofertaOnChain = await contract.ofertas(currentActiveOrder.id);
 
-            // Ejecuta la liberación real en blockchain si hay un comprador distinto registrado
             if (
                 ofertaOnChain.activa &&
                 ofertaOnChain.comprador !== "0x0000000000000000000000000000000000000000"
@@ -646,8 +660,34 @@ async function liberarFondos() {
     showToast("¡Fondos liberados y comisión cobrada con éxito!");
 }
 
+async function abrirDisputaOrden() {
+    if (!currentActiveOrder) return;
+    try {
+        const provider = new ethers.providers.Web3Provider(window.ethereum);
+        const signer = provider.getSigner();
+        const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+        
+        showToast("Registrando disputa en el Smart Contract...");
+        const tx = await contract.abrirDisputa(currentActiveOrder.id, AMOY_GAS_OVERRIDES);
+        await tx.wait();
+
+        const btnDispute = document.getElementById('btn-dispute');
+        const statusText = document.getElementById('order-status-text');
+        if (statusText) statusText.textContent = '⚠️ Orden en Disputa Arbitral (Congelada)';
+        if (btnDispute) btnDispute.disabled = true;
+
+        registrarEnHistorial("Disputa");
+        showToast("Disputa abierta con éxito. El administrador revisará el caso.");
+    } catch (err) {
+        console.error(err);
+        showToast("Error al abrir disputa en la blockchain.", true);
+    }
+}
+
 const btnMarkPaid = document.getElementById('btn-mark-paid');
 const btnReleaseFunds = document.getElementById('btn-release-funds');
+const btnDispute = document.getElementById('btn-dispute');
 
 if (btnMarkPaid) btnMarkPaid.addEventListener('click', marcarComoPagado);
 if (btnReleaseFunds) btnReleaseFunds.addEventListener('click', liberarFondos);
+if (btnDispute) btnDispute.addEventListener('click', abrirDisputaOrden);
