@@ -131,8 +131,9 @@ if (btnCloseBanner) {
 // CONTROL DEL TEMPORIZADOR DE LA ORDEN
 // ==========================================
 let orderTimerInterval = null;
-
-function startOrderTimer(durationInSeconds = 1800) {
+// para la produccion real cambiar a 1800 seg = 30 minutos o 15 minutos pero en segundos en los siguientes puntos
+// startOrderTimer(durationInSeconds = 60) y En abrirOrdenActiva(...), dejar startOrderTimer(60); al final.
+function startOrderTimer(durationInSeconds = 120) {
     if (orderTimerInterval) clearInterval(orderTimerInterval);
 
     let timer = durationInSeconds;
@@ -246,7 +247,7 @@ function abrirOrdenActiva(datosOferta) {
         chatMsgs.innerHTML = `<div style="color: #8b949e; text-align: center; font-style: italic;">Canal cifrado extremo a extremo establecido. Intercambien datos de Pago Móvil de forma segura.</div>`;
     }
 
-    startOrderTimer(1800);
+    startOrderTimer(120);
 }
 
 if (btnBack) {
