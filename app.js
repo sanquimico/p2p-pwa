@@ -220,6 +220,7 @@ function abrirOrdenActiva(datosOferta) {
 
     const statusText = document.getElementById('order-status-text');
     const statusBanner = document.querySelector('.order-status-banner');
+    const timerDisplay = document.getElementById('timer-display');
     const btnMarkPaid = document.getElementById('btn-mark-paid');
     const btnRelease = document.getElementById('btn-release-funds');
     const btnDispute = document.getElementById('btn-dispute');
@@ -241,11 +242,13 @@ function abrirOrdenActiva(datosOferta) {
 
     if (estaCompletada) {
         stopOrderTimer();
+        if (timerDisplay) timerDisplay.textContent = '--:--';
         if (statusText) statusText.textContent = '¡Orden completada! Fondos liberados y comisión 1% transferida.';
         if (statusBanner) { statusBanner.style.backgroundColor = '#10b981'; statusBanner.style.color = '#fff'; }
         setOrderButtonsLocked(true, true);
     } else if (estaEnDisputa) {
         stopOrderTimer();
+        if (timerDisplay) timerDisplay.textContent = '--:--';
         if (statusText) statusText.textContent = '⚠️ Orden en Disputa Arbitral (Congelada)';
         if (statusBanner) { statusBanner.style.backgroundColor = '#dc3545'; statusBanner.style.color = '#fff'; }
         setOrderButtonsLocked(true, false);
