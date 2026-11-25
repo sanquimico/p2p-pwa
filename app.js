@@ -131,10 +131,9 @@ if (btnCloseBanner) {
 // CONTROL DEL TEMPORIZADOR DE LA ORDEN
 // ==========================================
 let orderTimerInterval = null;
-// para la produccion real cambiar a 1800 seg = 30 minutos o 15 minutos pero en segundos en los siguientes puntos
-// startOrderTimer(durationInSeconds = 60) y En abrirOrdenActiva(...), dejar startOrderTimer(60); al final.
+// Para producción real cambiar a 1800 seg (30 min) o 900 seg (15 min) en startOrderTimer y abrirOrdenActiva
 function startOrderTimer(durationInSeconds = 120) {
-    if (orderTimerInterval) clearInterval(orderTimerInterval);
+    stopOrderTimer();
 
     let timer = durationInSeconds;
     const timerDisplay = document.getElementById('timer-display');
@@ -147,8 +146,7 @@ function startOrderTimer(durationInSeconds = 120) {
         if (timer >= 0) {
             updateTimerUI(timer, timerDisplay);
         } else {
-            clearInterval(orderTimerInterval);
-            orderTimerInterval = null;
+            stopOrderTimer();
             handleOrderTimeout();
         }
     }, 1000);
@@ -184,6 +182,21 @@ function stopOrderTimer() {
     }
 }
 
+function setOrderButtonsLocked(locked, hideButtons = false) {
+    const btnMarkPaid = document.getElementById('btn-mark-paid');
+    const btnRelease = document.getElementById('btn-release-funds');
+    const btnDispute = document.getElementById('btn-dispute');
+
+    [btnMarkPaid, btnRelease, btnDispute].forEach((btn) => {
+        if (!btn) return;
+        btn.disabled = locked;
+        btn.style.opacity = locked ? '0.5' : '1';
+        if (hideButtons) {
+            btn.classList.add('hidden');
+        }
+    });
+}
+
 // ==========================================
 // CONTROL DE VISTAS: ORDEN ACTIVA, CHAT & HISTORIAL
 // ==========================================
@@ -211,29 +224,36 @@ function abrirOrdenActiva(datosOferta) {
     const btnRelease = document.getElementById('btn-release-funds');
     const btnDispute = document.getElementById('btn-dispute');
 
-    if (statusText) {
-        statusText.textContent = datosOferta?.enDisputa
-            ? '⚠️ Orden en Disputa Arbitral (Congelada)'
-            : 'Esperando depósito / pago (Comisión 1% incluida)...';
-    }
-    if (statusBanner) {
-        statusBanner.style.backgroundColor = datosOferta?.enDisputa ? '#dc3545' : '#2563eb';
-        statusBanner.style.color = '#fff';
-    }
+    const estaEnDisputa = Boolean(datosOferta?.enDisputa);
+    const estaCompletada = Boolean(datosOferta?.completada);
+
     if (btnMarkPaid) {
-        btnMarkPaid.disabled = Boolean(datosOferta?.enDisputa);
-        btnMarkPaid.style.opacity = datosOferta?.enDisputa ? '0.5' : '1';
+        btnMarkPaid.classList.remove('hidden');
         btnMarkPaid.textContent = 'Ya pagué (Notificar al Vendedor)';
     }
     if (btnRelease) {
-        btnRelease.disabled = Boolean(datosOferta?.enDisputa);
-        btnRelease.style.opacity = datosOferta?.enDisputa ? '0.5' : '1';
+        btnRelease.classList.remove('hidden');
         btnRelease.textContent = 'Liberar USDT (Confirmar Pago)';
     }
     if (btnDispute) {
         btnDispute.classList.remove('hidden');
-        btnDispute.disabled = Boolean(datosOferta?.enDisputa);
-        btnDispute.style.opacity = datosOferta?.enDisputa ? '0.5' : '1';
+    }
+
+    if (estaCompletada) {
+        stopOrderTimer();
+        if (statusText) statusText.textContent = '¡Orden completada! Fondos liberados y comisión 1% transferida.';
+        if (statusBanner) { statusBanner.style.backgroundColor = '#10b981'; statusBanner.style.color = '#fff'; }
+        setOrderButtonsLocked(true, true);
+    } else if (estaEnDisputa) {
+        stopOrderTimer();
+        if (statusText) statusText.textContent = '⚠️ Orden en Disputa Arbitral (Congelada)';
+        if (statusBanner) { statusBanner.style.backgroundColor = '#dc3545'; statusBanner.style.color = '#fff'; }
+        setOrderButtonsLocked(true, false);
+    } else {
+        if (statusText) statusText.textContent = 'Esperando depósito / pago (Comisión 1% incluida)...';
+        if (statusBanner) { statusBanner.style.backgroundColor = '#2563eb'; statusBanner.style.color = '#fff'; }
+        setOrderButtonsLocked(false, false);
+        startOrderTimer(120);
     }
 
     if (datosOferta) {
@@ -246,8 +266,6 @@ function abrirOrdenActiva(datosOferta) {
     if (chatMsgs) {
         chatMsgs.innerHTML = `<div style="color: #8b949e; text-align: center; font-style: italic;">Canal cifrado extremo a extremo establecido. Intercambien datos de Pago Móvil de forma segura.</div>`;
     }
-
-    startOrderTimer(120);
 }
 
 if (btnBack) {
@@ -312,6 +330,7 @@ async function cargarOfertasBlockchain() {
                     montoCryptoNum,
                     tasaNum,
                     enDisputa: oferta.enDisputa,
+                    completada: oferta.completada,
                     ops: oferta.enDisputa ? "En Disputa" : (oferta.comprador !== ZERO_ADDRESS ? "Tomada" : "Disponible"),
                     rep: "100%",
                     amount: `${montoCryptoNum} USDT`,
@@ -432,13 +451,15 @@ async function initTrade(id) {
         const contractRead = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
         const ofertaFresh = await contractRead.ofertas(id);
 
-        if (!ofertaFresh.activa) {
+        if (!ofertaFresh.activa && !ofertaFresh.completada) {
             showToast("Esta oferta ya no está activa.", true);
             await cargarOfertasBlockchain();
             return;
         }
 
         if (
+            ofertaFresh.activa &&
+            !ofertaFresh.completada &&
             currentAccount &&
             currentAccount !== ofertaFresh.vendedor.toLowerCase() &&
             ofertaFresh.comprador === ZERO_ADDRESS &&
@@ -452,16 +473,18 @@ async function initTrade(id) {
             showToast("¡Orden tomada en blockchain!");
         }
 
-        const montoCryptoNum = ofertaFresh.montoCrypto.toNumber();
-        const tasaNum = ofertaFresh.tasa.toNumber();
+        const ofertaFinal = await contractRead.ofertas(id);
+        const montoCryptoNum = ofertaFinal.montoCrypto.toNumber();
+        const tasaNum = ofertaFinal.tasa.toNumber();
         const montoFiatTotal = (montoCryptoNum * tasaNum).toFixed(2);
 
         currentActiveOrder = {
-            id: ofertaFresh.id.toNumber(),
-            user: `${ofertaFresh.vendedor.substring(0, 6)}...${ofertaFresh.vendedor.substring(ofertaFresh.vendedor.length - 4)}`,
-            vendedorFull: ofertaFresh.vendedor,
-            compradorFull: ofertaFresh.comprador,
-            enDisputa: ofertaFresh.enDisputa,
+            id: ofertaFinal.id.toNumber(),
+            user: `${ofertaFinal.vendedor.substring(0, 6)}...${ofertaFinal.vendedor.substring(ofertaFinal.vendedor.length - 4)}`,
+            vendedorFull: ofertaFinal.vendedor,
+            compradorFull: ofertaFinal.comprador,
+            enDisputa: ofertaFinal.enDisputa,
+            completada: ofertaFinal.completada,
             net: "Polygon",
             montoCrypto: montoCryptoNum.toFixed(2),
             montoFiat: montoFiatTotal,
@@ -602,12 +625,44 @@ if (formOrder) {
     });
 }
 
-document.addEventListener('DOMContentLoaded', cargarOfertasBlockchain);
-
 // ==========================================
-// CONEXIÓN DE WALLET
+// CONEXIÓN DE WALLET Y CAMBIO DE CUENTA
 // ==========================================
 const btnConnect = document.getElementById('btn-connect');
+
+function actualizarBotonCuenta(account) {
+    if (!btnConnect) return;
+    if (account) {
+        btnConnect.textContent = `${account.substring(0, 6)}...${account.substring(account.length - 4)}`;
+        btnConnect.style.backgroundColor = '#10b981';
+    } else {
+        btnConnect.textContent = 'Conectar Wallet';
+        btnConnect.style.backgroundColor = '';
+    }
+}
+
+async function sincronizarCuentaExistente() {
+    if (typeof window.ethereum === 'undefined') return;
+    try {
+        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+        actualizarBotonCuenta(accounts[0] || null);
+    } catch (err) {
+        console.warn("No se pudo leer cuenta conectada:", err.message);
+    }
+}
+
+if (typeof window.ethereum !== 'undefined' && window.ethereum.on) {
+    window.ethereum.on('accountsChanged', (accounts) => {
+        const nuevaCuenta = accounts && accounts[0] ? accounts[0] : null;
+        actualizarBotonCuenta(nuevaCuenta);
+        if (nuevaCuenta) {
+            showToast(`Cuenta activa actualizada: ${nuevaCuenta.substring(0, 6)}...${nuevaCuenta.substring(nuevaCuenta.length - 4)}`);
+        } else {
+            showToast("Wallet desconectada.");
+        }
+        cargarOfertasBlockchain();
+    });
+}
 
 if (btnConnect) {
     btnConnect.addEventListener('click', async () => {
@@ -629,8 +684,7 @@ if (btnConnect) {
                     }
                 }
 
-                btnConnect.textContent = `${account.substring(0, 6)}...${account.substring(account.length - 4)}`;
-                btnConnect.style.backgroundColor = '#10b981';
+                actualizarBotonCuenta(account);
                 showToast("Wallet descentralizada conectada con éxito.");
                 cargarOfertasBlockchain();
             } catch (error) {
@@ -641,6 +695,11 @@ if (btnConnect) {
         }
     });
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+    sincronizarCuentaExistente();
+    cargarOfertasBlockchain();
+});
 
 // ==========================================
 // ACCIONES DE ORDEN & DISPUTAS
@@ -680,15 +739,13 @@ async function liberarFondos() {
     }
 
     stopOrderTimer();
+    currentActiveOrder.completada = true;
     const statusText = document.getElementById('order-status-text');
     const statusBanner = document.querySelector('.order-status-banner');
-    const btnMarkPaid = document.getElementById('btn-mark-paid');
-    const btnRelease = document.getElementById('btn-release-funds');
 
     if (statusText) statusText.textContent = '¡Orden completada! Fondos liberados y comisión 1% transferida.';
     if (statusBanner) { statusBanner.style.backgroundColor = '#10b981'; }
-    if (btnMarkPaid) btnMarkPaid.disabled = true;
-    if (btnRelease) { btnRelease.disabled = true; btnRelease.style.opacity = '0.5'; }
+    setOrderButtonsLocked(true, true);
 
     registrarEnHistorial("Completado");
     showToast("¡Fondos liberados y comisión cobrada con éxito!");
@@ -705,17 +762,14 @@ async function abrirDisputaOrden() {
         const tx = await contract.abrirDisputa(currentActiveOrder.id, AMOY_GAS_OVERRIDES);
         await tx.wait();
 
-        const btnDispute = document.getElementById('btn-dispute');
-        const btnMarkPaid = document.getElementById('btn-mark-paid');
-        const btnRelease = document.getElementById('btn-release-funds');
+        stopOrderTimer();
+        currentActiveOrder.enDisputa = true;
         const statusText = document.getElementById('order-status-text');
         const statusBanner = document.querySelector('.order-status-banner');
 
         if (statusText) statusText.textContent = '⚠️ Orden en Disputa Arbitral (Congelada)';
         if (statusBanner) statusBanner.style.backgroundColor = '#dc3545';
-        if (btnDispute) { btnDispute.disabled = true; btnDispute.style.opacity = '0.5'; }
-        if (btnMarkPaid) { btnMarkPaid.disabled = true; btnMarkPaid.style.opacity = '0.5'; }
-        if (btnRelease) { btnRelease.disabled = true; btnRelease.style.opacity = '0.5'; }
+        setOrderButtonsLocked(true, true);
 
         registrarEnHistorial("Disputa");
         showToast("Disputa abierta con éxito. El administrador revisará el caso.");
