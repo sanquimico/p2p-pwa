@@ -1,178 +1,93 @@
-let deferredPrompt;
-const pwaBanner = document.getElementById('pwa-banner');
-const btnInstall = document.getElementById('btn-install');
-const btnCloseBanner = document.getElementById('btn-close-banner');
-const pwaBadge = document.getElementById('pwa-badge');
-
-const TARGET_CHAIN_ID = '0x13882'; // Polygon Amoy Testnet (80002)
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
-
-// Contrato P2PEscrow validado en Polygon Amoy
-const CONTRACT_ADDRESS = "0xA3266d32A130cd803abC22dDbbE16f10F8a852D8";
-
-const CONTRACT_ABI = [
-    {
-        "inputs": [
-            { "internalType": "uint256", "name": "_montoCrypto", "type": "uint256" },
-            { "internalType": "uint256", "name": "_tasa", "type": "uint256" }
-        ],
-        "name": "crearOferta",
-        "outputs": [],
-        "stateMutability": "payable",
-        "type": "function"
-    },
-    {
-        "inputs": [{ "internalType": "uint256", "name": "_id", "type": "uint256" }],
-        "name": "tomarOferta",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
-    },
-    {
-        "inputs": [{ "internalType": "uint256", "name": "_id", "type": "uint256" }],
-        "name": "liberarFondos",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
-    },
-    {
-        "inputs": [{ "internalType": "uint256", "name": "_id", "type": "uint256" }],
-        "name": "abrirDisputa",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
-    },
-    {
-        "inputs": [],
-        "name": "contadorOfertas",
-        "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [],
-        "name": "feePercent",
-        "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
-        "name": "ofertas",
-        "outputs": [
-            { "internalType": "uint256", "name": "id", "type": "uint256" },
-            { "internalType": "address payable", "name": "vendedor", "type": "address" },
-            { "internalType": "address payable", "name": "comprador", "type": "address" },
-            { "internalType": "uint256", "name": "montoDeposito", "type": "uint256" },
-            { "internalType": "uint256", "name": "montoCrypto", "type": "uint256" },
-            { "internalType": "uint256", "name": "tasa", "type": "uint256" },
-            { "internalType": "bool", "name": "activa", "type": "bool" },
-            { "internalType": "bool", "name": "completada", "type": "bool" },
-            { "internalType": "bool", "name": "enDisputa", "type": "bool" }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [{ "internalType": "address", "name": "", "type": "address" }],
-        "name": "listaNegra",
-        "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
-        "stateMutability": "view",
-        "type": "function"
-    }
-];
+const ESCROW_CONTRACT_ADDRESS = "0xA3266d32A130cd803abC22dDbbE16f10F8a852D8";
+const AMOY_CHAIN_ID = 80002;
+const AMOY_CHAIN_ID_HEX = "0x13882";
+const HISTORY_STORAGE_KEY = "p2p_escrow_history_amoy";
 
 const AMOY_GAS_OVERRIDES = {
     maxPriorityFeePerGas: ethers.utils.parseUnits("30", "gwei"),
     maxFeePerGas: ethers.utils.parseUnits("35", "gwei")
 };
 
-// Sistema de Notificaciones Toast
-function showToast(message, isError = false) {
-    const container = document.getElementById('toast-container');
-    if (!container) return;
-    const toast = document.createElement('div');
-    toast.className = `toast ${isError ? 'error' : ''}`;
+const ESCROW_ABI = [
+    "function offerCount() view returns (uint256)",
+    "function offers(uint256) view returns (uint256 id, address seller, address buyer, uint256 amountUSDT, uint256 rateBs, uint8 status, uint256 createdAt)",
+    "function createOffer(uint256 _amountUSDT, uint256 _rateBs) payable returns (uint256)",
+    "function takeOffer(uint256 _offerId) payable",
+    "function markPaid(uint256 _offerId)",
+    "function releaseFunds(uint256 _offerId)",
+    "function openDispute(uint256 _offerId)",
+    "function resolveDispute(uint256 _offerId, bool _releaseToBuyer)"
+];
+
+let provider = null;
+let signer = null;
+let contract = null;
+let currentAccount = null;
+let activeOffers = [];
+let currentOrderContext = null;
+let orderHistory = loadHistoryFromStorage();
+let orderTimerInterval = null;
+let remainingSeconds = 120;
+let isRefreshingOffers = false;
+
+const connectWalletBtn = document.getElementById("connect-wallet-btn");
+const walletBadge = document.getElementById("wallet-badge");
+const createOfferBtn = document.getElementById("create-offer-btn");
+const createOfferModal = document.getElementById("create-offer-modal");
+const cancelOfferBtn = document.getElementById("cancel-offer-btn");
+const publishOfferBtn = document.getElementById("publish-offer-btn");
+const offersContainer = document.getElementById("offers-container");
+const historySection = document.getElementById("history-section");
+const historyList = document.getElementById("history-list");
+const tradeTabsSection = document.getElementById("trade-tabs-section");
+const filtersSection = document.getElementById("filters-section");
+const orderViewSection = document.getElementById("order-view-section");
+const backToMarketBtn = document.getElementById("back-to-market-btn");
+
+function showToast(message, type = "info") {
+    let container = document.getElementById("toast-container");
+    if (!container) {
+        container = document.createElement("div");
+        container.id = "toast-container";
+        container.style.cssText = "position:fixed;top:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px;max-width:340px;";
+        document.body.appendChild(container);
+    }
+    const toast = document.createElement("div");
+    const bgMap = {
+        info: "#1f6feb",
+        success: "#198754",
+        warning: "#b45309",
+        error: "#dc3545"
+    };
+    toast.style.cssText = `background:${bgMap[type] || bgMap.info};color:#fff;padding:10px 14px;border-radius:8px;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,0.35);`;
     toast.textContent = message;
     container.appendChild(toast);
-    setTimeout(() => toast.remove(), 3500);
+    setTimeout(() => toast.remove(), 4200);
 }
 
-window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-    if (pwaBanner) pwaBanner.classList.remove('hidden');
-});
-
-if (btnInstall) {
-    btnInstall.addEventListener('click', async () => {
-        if (deferredPrompt) {
-            deferredPrompt.prompt();
-            const { outcome } = await deferredPrompt.userChoice;
-            if (outcome === 'accepted') {
-                if (pwaBanner) pwaBanner.classList.add('hidden');
-                if (pwaBadge) {
-                    pwaBadge.textContent = "PWA Instalada";
-                    pwaBadge.style.color = "#10b981";
-                }
-            }
-            deferredPrompt = null;
-        }
-    });
+function loadHistoryFromStorage() {
+    try {
+        const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (err) {
+        console.warn("No se pudo leer historial desde localStorage:", err);
+        return [];
+    }
 }
 
-if (btnCloseBanner) {
-    btnCloseBanner.addEventListener('click', () => {
-        if (pwaBanner) pwaBanner.classList.add('hidden');
-    });
+function saveHistoryToStorage() {
+    try {
+        localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(orderHistory));
+    } catch (err) {
+        console.warn("No se pudo guardar historial en localStorage:", err);
+    }
 }
 
-// ==========================================
-// CONTROL DEL TEMPORIZADOR DE LA ORDEN
-// ==========================================
-let orderTimerInterval = null;
-// Para producción real cambiar a 1800 seg (30 min) o 900 seg (15 min) en startOrderTimer y abrirOrdenActiva
-function startOrderTimer(durationInSeconds = 120) {
-    stopOrderTimer();
-
-    let timer = durationInSeconds;
-    const timerDisplay = document.getElementById('timer-display');
-    if (!timerDisplay) return;
-
-    updateTimerUI(timer, timerDisplay);
-
-    orderTimerInterval = setInterval(() => {
-        timer--;
-        if (timer >= 0) {
-            updateTimerUI(timer, timerDisplay);
-        } else {
-            stopOrderTimer();
-            handleOrderTimeout();
-        }
-    }, 1000);
-}
-
-function updateTimerUI(seconds, element) {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    element.textContent = `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
-}
-
-function handleOrderTimeout() {
-    const statusText = document.getElementById('order-status-text');
-    const statusBanner = document.querySelector('.order-status-banner');
-    const btnMarkPaid = document.getElementById('btn-mark-paid');
-    const btnRelease = document.getElementById('btn-release-funds');
-    const btnDispute = document.getElementById('btn-dispute');
-
-    if (statusText) statusText.textContent = 'Orden expirada por tiempo agotado';
-    if (statusBanner) { statusBanner.style.backgroundColor = '#dc3545'; statusBanner.style.color = '#fff'; }
-    if (btnMarkPaid) { btnMarkPaid.disabled = true; btnMarkPaid.style.opacity = '0.5'; }
-    if (btnRelease) { btnRelease.disabled = true; btnRelease.style.opacity = '0.5'; }
-    if (btnDispute) { btnDispute.classList.remove('hidden'); btnDispute.disabled = false; btnDispute.style.opacity = '1'; }
-
-    registrarEnHistorial("Expirada");
-    showToast('El tiempo límite para realizar el pago ha expirado.', true);
+function formatShortAddress(addr) {
+    if (!addr) return "";
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
 function stopOrderTimer() {
@@ -182,610 +97,463 @@ function stopOrderTimer() {
     }
 }
 
-function setOrderButtonsLocked(locked, hideButtons = false) {
-    const btnMarkPaid = document.getElementById('btn-mark-paid');
-    const btnRelease = document.getElementById('btn-release-funds');
-    const btnDispute = document.getElementById('btn-dispute');
+function setTimerDisplayText(text) {
+    const timerDisplay = document.getElementById("timer-display");
+    if (timerDisplay) {
+        timerDisplay.textContent = text;
+    }
+}
 
-    [btnMarkPaid, btnRelease, btnDispute].forEach((btn) => {
+function startOrderTimer(seconds = 120) {
+    stopOrderTimer();
+    remainingSeconds = seconds;
+    const renderTime = () => {
+        const mins = String(Math.floor(remainingSeconds / 60)).padStart(2, "0");
+        const secs = String(remainingSeconds % 60).padStart(2, "0");
+        setTimerDisplayText(`${mins}:${secs}`);
+    };
+    renderTime();
+    orderTimerInterval = setInterval(() => {
+        if (remainingSeconds > 0) {
+            remainingSeconds -= 1;
+            renderTime();
+        } else {
+            stopOrderTimer();
+            setTimerDisplayText("00:00");
+            const statusText = document.getElementById("order-status-text");
+            if (statusText && currentOrderContext && !currentOrderContext.completada && !currentOrderContext.enDisputa) {
+                statusText.textContent = "Tiempo de ventana agotado — verifica estado o abre disputa si aplica.";
+            }
+        }
+    }, 1000);
+}
+
+function setOrderButtonsLocked(locked, isCompleted = false) {
+    const btnMarkPaid = document.getElementById("btn-mark-paid");
+    const btnRelease = document.getElementById("btn-release-funds");
+    const btnDispute = document.getElementById("btn-dispute");
+    const buttons = [btnMarkPaid, btnRelease, btnDispute];
+
+    buttons.forEach((btn) => {
         if (!btn) return;
-        btn.disabled = locked;
-        btn.style.opacity = locked ? '0.5' : '1';
-        if (hideButtons) {
-            btn.classList.add('hidden');
+        btn.disabled = Boolean(locked);
+        btn.style.opacity = locked ? "0.5" : "1";
+        btn.style.cursor = locked ? "not-allowed" : "pointer";
+        if (locked && isCompleted) {
+            btn.classList.add("hidden");
         }
     });
 }
 
-// ==========================================
-// CONTROL DE VISTAS: ORDEN ACTIVA, CHAT & HISTORIAL
-// ==========================================
-const offersContainer = document.getElementById('offers-container');
-const tradeTabsSection = document.querySelector('.trade-tabs');
-const filtersSection = document.querySelector('.filters');
-const historySection = document.querySelector('.history-section');
-const orderViewSection = document.getElementById('order-view');
-const btnBack = document.getElementById('btn-back');
+function aplicarVisibilidadPorRol(datosOferta) {
+    const btnMarkPaid = document.getElementById("btn-mark-paid");
+    const btnRelease = document.getElementById("btn-release-funds");
+    const btnDispute = document.getElementById("btn-dispute");
 
-let currentActiveOrder = null;
-const orderHistory = [];
-let onChainOffers = [];
+    if (!btnMarkPaid || !btnRelease || !btnDispute) return;
+
+    btnMarkPaid.classList.remove("hidden");
+    btnRelease.classList.remove("hidden");
+    btnDispute.classList.remove("hidden");
+
+    const acct = (currentAccount || "").toLowerCase();
+    const seller = (datosOferta?.seller || "").toLowerCase();
+    const buyer = (datosOferta?.buyer || "").toLowerCase();
+
+    if (acct && seller && acct === seller && acct !== buyer) {
+        btnMarkPaid.classList.add("hidden");
+    } else if (acct && buyer && acct === buyer && acct !== seller) {
+        btnRelease.classList.add("hidden");
+    }
+}
+
+function upsertHistoryEntry(entry) {
+    const idx = orderHistory.findIndex((item) => String(item.offerId) === String(entry.offerId));
+    if (idx >= 0) {
+        orderHistory[idx] = { ...orderHistory[idx], ...entry };
+    } else {
+        orderHistory.unshift(entry);
+    }
+    saveHistoryToStorage();
+    renderHistory();
+}
+
+function renderHistory() {
+    if (!historyList) return;
+    if (!orderHistory.length) {
+        historyList.innerHTML = `<p style="color:#8b949e;">No hay transacciones registradas en esta sesión.</p>`;
+        return;
+    }
+    historyList.innerHTML = orderHistory.map((item) => `
+        <div style="background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+            <div>
+                <strong>Oferta #${item.offerId}</strong> · ${item.montoCrypto} USDT @ ${item.tasa} Bs (${item.montoFiat} Bs)
+                <div style="font-size:12px;color:#8b949e;">${item.fecha || ""}</div>
+            </div>
+            <span style="padding:4px 10px;border-radius:6px;font-size:12px;font-weight:600;background:#21262d;color:#fff;">
+                ${item.estado}
+            </span>
+        </div>
+    `).join("");
+}
+
+function mapContractStatus(statusCode) {
+    const code = Number(statusCode);
+    switch (code) {
+        case 0: return { label: "Activa", enDisputa: false, completada: false };
+        case 1: return { label: "En Proceso", enDisputa: false, completada: false };
+        case 2: return { label: "Completada", enDisputa: false, completada: true };
+        case 3: return { label: "En Disputa", enDisputa: true, completada: false };
+        case 4: return { label: "Cancelada", enDisputa: false, completada: true };
+        default: return { label: "Activa", enDisputa: false, completada: false };
+    }
+}
+
+function syncWalletUI(account) {
+    currentAccount = account || null;
+    if (connectWalletBtn) {
+        connectWalletBtn.textContent = currentAccount ? formatShortAddress(currentAccount) : "Conectar Wallet";
+    }
+    if (walletBadge) {
+        walletBadge.textContent = currentAccount ? formatShortAddress(currentAccount) : "Desconectada";
+    }
+    if (currentOrderContext && orderViewSection && !orderViewSection.classList.contains("hidden")) {
+        aplicarVisibilidadPorRol(currentOrderContext);
+    }
+}
+
+async function ensureAmoyNetwork() {
+    if (!window.ethereum) {
+        throw new Error("MetaMask no detectado");
+    }
+    const chainIdHex = await window.ethereum.request({ method: "eth_chainId" });
+    if (parseInt(chainIdHex, 16) !== AMOY_CHAIN_ID) {
+        try {
+            await window.ethereum.request({
+                method: "wallet_switchEthereumChain",
+                params: [{ chainId: AMOY_CHAIN_ID_HEX }]
+            });
+        } catch (switchError) {
+            if (switchError.code === 4902) {
+                await window.ethereum.request({
+                    method: "wallet_addEthereumChain",
+                    params: [{
+                        chainId: AMOY_CHAIN_ID_HEX,
+                        chainName: "Polygon Amoy Testnet",
+                        nativeCurrency: { name: "POL", symbol: "POL", decimals: 18 },
+                        rpcUrls: ["https://rpc-amoy.polygon.technology/"],
+                        blockExplorerUrls: ["https://amoy.polygonscan.com/"]
+                    }]
+                });
+            } else {
+                throw switchError;
+            }
+        }
+    }
+    provider = new ethers.providers.Web3Provider(window.ethereum);
+    signer = provider.getSigner();
+    contract = new ethers.Contract(ESCROW_CONTRACT_ADDRESS, ESCROW_ABI, signer);
+}
+
+async function conectarWallet(silent = false) {
+    if (!window.ethereum) {
+        if (!silent) showToast("Instala MetaMask para operar en Polygon Amoy.", "warning");
+        return;
+    }
+    try {
+        const method = silent ? "eth_accounts" : "eth_requestAccounts";
+        const accounts = await window.ethereum.request({ method });
+        if (accounts && accounts.length > 0) {
+            syncWalletUI(accounts[0]);
+            await ensureAmoyNetwork();
+            await cargarOfertasBlockchain();
+        } else {
+            syncWalletUI(null);
+        }
+    } catch (err) {
+        console.error("Error al conectar wallet:", err);
+        if (!silent) showToast("No se pudo conectar la wallet o cambiar a Amoy.", "error");
+    }
+}
+
+async function cargarOfertasBlockchain() {
+    if (isRefreshingOffers) return;
+    isRefreshingOffers = true;
+    try {
+        const readProvider = provider || (window.ethereum ? new ethers.providers.Web3Provider(window.ethereum) : null);
+        if (!readProvider) return;
+        const readContract = new ethers.Contract(ESCROW_CONTRACT_ADDRESS, ESCROW_ABI, readProvider);
+        const countBN = await readContract.offerCount();
+        const total = countBN.toNumber();
+        const loaded = [];
+
+        for (let i = 1; i <= total; i++) {
+            const raw = await readContract.offers(i);
+            const statusInfo = mapContractStatus(raw.status);
+            const montoCrypto = Number(ethers.utils.formatUnits(raw.amountUSDT, 0));
+            const tasa = Number(ethers.utils.formatUnits(raw.rateBs, 0));
+            loaded.push({
+                offerId: raw.id.toString(),
+                seller: raw.seller,
+                buyer: raw.buyer,
+                montoCrypto,
+                tasa,
+                montoFiat: (montoCrypto * tasa).toFixed(2),
+                statusCode: Number(raw.status),
+                estadoLabel: statusInfo.label,
+                enDisputa: statusInfo.enDisputa,
+                completada: statusInfo.completada
+            });
+        }
+
+        activeOffers = loaded;
+        renderOffers();
+    } catch (err) {
+        console.warn("No se pudieron cargar ofertas desde Amoy:", err.message || err);
+    } finally {
+        isRefreshingOffers = false;
+    }
+}
+
+function renderOffers() {
+    if (!offersContainer) return;
+    const visibleOffers = activeOffers.filter((o) => !o.completada);
+    if (!visibleOffers.length) {
+        offersContainer.innerHTML = `<p style="color:#8b949e;text-align:center;padding:16px;">No hay ofertas activas en el contrato en este momento. Publica una usando el botón superior.</p>`;
+        return;
+    }
+    offersContainer.innerHTML = visibleOffers.map((offer, idx) => `
+        <div style="background:#161b22;border:1px solid #30363d;border-radius:10px;padding:16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+            <div>
+                <div style="font-size:13px;color:#8b949e;margin-bottom:4px;">
+                    ${formatShortAddress(offer.seller)} · <span style="color:${offer.enDisputa ? "#f87171" : "#34d399"};">${offer.estadoLabel}</span>
+                </div>
+                <div style="font-size:20px;font-weight:700;">${offer.tasa} Bs <span style="font-size:13px;font-weight:400;color:#8b949e;">/ USDT</span></div>
+                <div style="font-size:13px;color:#8b949e;">Disponible: ${offer.montoCrypto} USDT · Oferta #${offer.offerId}</div>
+            </div>
+            <button onclick="abrirOrdenDesdeLista(${idx})" style="background:#10b981;color:#fff;border:none;padding:10px 16px;border-radius:8px;font-weight:600;cursor:pointer;">
+                Intercambiar
+            </button>
+        </div>
+    `).join("");
+}
+
+window.abrirOrdenDesdeLista = function (index) {
+    const visibleOffers = activeOffers.filter((o) => !o.completada);
+    const offer = visibleOffers[index];
+    if (!offer) return;
+    abrirOrdenActiva(offer);
+};
 
 function abrirOrdenActiva(datosOferta) {
-    if (tradeTabsSection) tradeTabsSection.classList.add('hidden');
-    if (filtersSection) filtersSection.classList.add('hidden');
-    if (offersContainer) offersContainer.classList.add('hidden');
-    if (historySection) historySection.classList.add('hidden');
-    if (orderViewSection) orderViewSection.classList.remove('hidden');
+    currentOrderContext = { ...datosOferta };
+    if (tradeTabsSection) tradeTabsSection.classList.add("hidden");
+    if (filtersSection) filtersSection.classList.add("hidden");
+    if (offersContainer) offersContainer.classList.add("hidden");
+    if (historySection) historySection.classList.add("hidden");
+    if (orderViewSection) orderViewSection.classList.remove("hidden");
 
-    const statusText = document.getElementById('order-status-text');
-    const statusBanner = document.querySelector('.order-status-banner');
-    const timerDisplay = document.getElementById('timer-display');
-    const btnMarkPaid = document.getElementById('btn-mark-paid');
-    const btnRelease = document.getElementById('btn-release-funds');
-    const btnDispute = document.getElementById('btn-dispute');
+    const statusText = document.getElementById("order-status-text");
+    const statusBanner = document.querySelector(".order-status-banner");
+    const btnMarkPaid = document.getElementById("btn-mark-paid");
+    const btnRelease = document.getElementById("btn-release-funds");
+    const btnDispute = document.getElementById("btn-dispute");
 
     const estaEnDisputa = Boolean(datosOferta?.enDisputa);
     const estaCompletada = Boolean(datosOferta?.completada);
 
-    if (btnMarkPaid) {
-        btnMarkPaid.classList.remove('hidden');
-        btnMarkPaid.textContent = 'Ya pagué (Notificar al Vendedor)';
-    }
-    if (btnRelease) {
-        btnRelease.classList.remove('hidden');
-        btnRelease.textContent = 'Liberar USDT (Confirmar Pago)';
-    }
-    if (btnDispute) {
-        btnDispute.classList.remove('hidden');
-    }
+    if (btnMarkPaid) btnMarkPaid.textContent = "Ya pagué (Notificar al Vendedor)";
+    if (btnRelease) btnRelease.textContent = "Liberar USDT (Confirmar Pago)";
+
+    aplicarVisibilidadPorRol(datosOferta);
 
     if (estaCompletada) {
         stopOrderTimer();
-        if (timerDisplay) timerDisplay.textContent = '--:--';
-        if (statusText) statusText.textContent = '¡Orden completada! Fondos liberados y comisión 1% transferida.';
-        if (statusBanner) { statusBanner.style.backgroundColor = '#10b981'; statusBanner.style.color = '#fff'; }
+        setTimerDisplayText("--:--");
+        if (statusText) statusText.textContent = "¡Orden completada! Fondos liberados y comisión 1% transferida.";
+        if (statusBanner) { statusBanner.style.backgroundColor = "#10b981"; statusBanner.style.color = "#fff"; }
         setOrderButtonsLocked(true, true);
     } else if (estaEnDisputa) {
         stopOrderTimer();
-        if (timerDisplay) timerDisplay.textContent = '--:--';
-        if (statusText) statusText.textContent = '⚠️ Orden en Disputa Arbitral (Congelada)';
-        if (statusBanner) { statusBanner.style.backgroundColor = '#dc3545'; statusBanner.style.color = '#fff'; }
+        setTimerDisplayText("--:--");
+        if (statusText) statusText.textContent = "⚠️ Orden en Disputa Arbitral (Congelada)";
+        if (statusBanner) { statusBanner.style.backgroundColor = "#dc3545"; statusBanner.style.color = "#fff"; }
         setOrderButtonsLocked(true, false);
     } else {
-        if (statusText) statusText.textContent = 'Esperando depósito / pago (Comisión 1% incluida)...';
-        if (statusBanner) { statusBanner.style.backgroundColor = '#2563eb'; statusBanner.style.color = '#fff'; }
+        if (statusText) statusText.textContent = "Esperando depósito / pago (Comisión 1% incluida)...";
+        if (statusBanner) { statusBanner.style.backgroundColor = "#2563eb"; statusBanner.style.color = "#fff"; }
         setOrderButtonsLocked(false, false);
         startOrderTimer(120);
     }
 
     if (datosOferta) {
-        document.getElementById('order-fiat-amount').textContent = `${datosOferta.montoFiat} Bs`;
-        document.getElementById('order-crypto-amount').textContent = `${datosOferta.montoCrypto} USDT`;
-        document.getElementById('order-rate').textContent = `${datosOferta.tasa} Bs / USDT`;
+        const fiatEl = document.getElementById("order-fiat-amount");
+        const cryptoEl = document.getElementById("order-crypto-amount");
+        const rateEl = document.getElementById("order-rate");
+        if (fiatEl) fiatEl.textContent = `${datosOferta.montoFiat} Bs`;
+        if (cryptoEl) cryptoEl.textContent = `${datosOferta.montoCrypto} USDT`;
+        if (rateEl) rateEl.textContent = `${datosOferta.tasa} Bs / USDT`;
     }
 
-    const chatMsgs = document.getElementById('chat-messages');
+    const chatMsgs = document.getElementById("chat-messages");
     if (chatMsgs) {
-        chatMsgs.innerHTML = `<div style="color: #8b949e; text-align: center; font-style: italic;">Canal cifrado extremo a extremo establecido. Intercambien datos de Pago Móvil de forma segura.</div>`;
+        chatMsgs.innerHTML = `<div style="color:#8b949e;text-align:center;font-style:italic;">Canal cifrado extremo a extremo establecido. Intercambien datos de Pago Móvil de forma segura.</div>`;
     }
 }
 
-if (btnBack) {
-    btnBack.addEventListener('click', () => {
-        stopOrderTimer();
-        currentActiveOrder = null;
-        if (orderViewSection) orderViewSection.classList.add('hidden');
-        if (tradeTabsSection) tradeTabsSection.classList.remove('hidden');
-        if (filtersSection) filtersSection.classList.remove('hidden');
-        if (offersContainer) offersContainer.classList.remove('hidden');
-        if (historySection) historySection.classList.remove('hidden');
-        cargarOfertasBlockchain();
-    });
-}
-
-const btnSendChat = document.getElementById('btn-send-chat');
-const chatInput = document.getElementById('chat-input');
-const chatMessages = document.getElementById('chat-messages');
-
-if (btnSendChat && chatInput && chatMessages) {
-    btnSendChat.addEventListener('click', () => {
-        const text = chatInput.value.trim();
-        if (!text) return;
-        const msgDiv = document.createElement('div');
-        msgDiv.className = "chat-message me";
-        msgDiv.textContent = `Tú: ${text}`;
-        chatMessages.appendChild(msgDiv);
-        chatInput.value = "";
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-        showToast("Mensaje cifrado enviado con éxito.");
-    });
-}
-
-// ==========================================
-// SINCRONIZACIÓN EN VIVO CON SMART CONTRACT
-// ==========================================
-async function cargarOfertasBlockchain() {
-    if (typeof window.ethereum === 'undefined') {
-        renderOffers();
-        return;
-    }
-
-    try {
-        const provider = new ethers.providers.Web3Provider(window.ethereum);
-        const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
-        const total = await contract.contadorOfertas();
-        const totalNum = total.toNumber();
-
-        const loaded = [];
-        for (let i = totalNum; i >= 1; i--) {
-            const oferta = await contract.ofertas(i);
-            if (oferta.activa) {
-                const montoCryptoNum = oferta.montoCrypto.toNumber();
-                const tasaNum = oferta.tasa.toNumber();
-                const vendedorCorto = `${oferta.vendedor.substring(0, 6)}...${oferta.vendedor.substring(oferta.vendedor.length - 4)}`;
-
-                loaded.push({
-                    id: oferta.id.toNumber(),
-                    user: vendedorCorto,
-                    vendedorFull: oferta.vendedor,
-                    compradorFull: oferta.comprador,
-                    montoCryptoNum,
-                    tasaNum,
-                    enDisputa: oferta.enDisputa,
-                    completada: oferta.completada,
-                    ops: oferta.enDisputa ? "En Disputa" : (oferta.comprador !== ZERO_ADDRESS ? "Tomada" : "Disponible"),
-                    rep: "100%",
-                    amount: `${montoCryptoNum} USDT`,
-                    rate: `${tasaNum} Bs`,
-                    net: "Polygon",
-                    type: "buy"
-                });
-            }
-        }
-        onChainOffers = loaded;
-    } catch (err) {
-        console.warn("Esperando conexión a Amoy para sincronizar ofertas:", err.message);
-    }
-
-    renderOffers();
-}
-
-function renderOffers() {
-    const container = document.getElementById('offers-container');
-    if (!container) return;
-    container.innerHTML = "";
-
-    const filterNet = document.getElementById('filter-network')?.value || 'all';
-
-    const filtered = onChainOffers.filter(o => {
-        const matchNet = (filterNet === 'all' || o.net.toLowerCase() === filterNet.toLowerCase());
-        return matchNet;
-    });
-
-    if (filtered.length === 0) {
-        container.innerHTML = `<p style="color: #8b949e; font-size: 0.9rem; text-align: center; padding: 20px;">No hay ofertas activas en el contrato en este momento. Publica una usando el botón superior.</p>`;
-        return;
-    }
-
-    filtered.forEach(o => {
-        const card = document.createElement('div');
-        card.className = "card-offer";
-        card.innerHTML = `
-            <div class="card-header">
-                <div class="user-info">👤 ${o.user} <span class="reputation">★ ${o.rep} (${o.ops})</span></div>
-                <span class="badge">${o.net}</span>
-            </div>
-            <div class="card-body">
-                <div>
-                    <div class="price">${o.rate} <span>/ USDT</span></div>
-                    <div class="limits">Disponible: ${o.amount} · Oferta #${o.id}</div>
-                </div>
-                <button class="btn-primary-sm" onclick="initTrade(${o.id})">Intercambiar</button>
-            </div>
-        `;
-        container.appendChild(card);
-    });
-}
-
-function renderHistory() {
-    const container = document.getElementById('history-container');
-    if (!container) return;
-
-    if (orderHistory.length === 0) {
-        container.innerHTML = `<p style="color: #8b949e; font-size: 0.9rem;">No hay transacciones registradas en esta sesión.</p>`;
-        return;
-    }
-
-    container.innerHTML = "";
-    orderHistory.forEach(item => {
-        const card = document.createElement('div');
-        card.className = "card-offer";
-        card.innerHTML = `
-            <div class="card-header">
-                <div class="user-info">📦 Orden #${item.id} <span class="reputation" style="color: ${item.color}">${item.status}</span></div>
-                <span class="badge">${item.net}</span>
-            </div>
-            <div class="card-body">
-                <div>
-                    <div class="price">${item.rate} <span>/ USDT</span></div>
-                    <div class="limits">Total: ${item.montoFiat} Bs (${item.montoCrypto} USDT)</div>
-                </div>
-                <span style="font-size: 0.85rem; color: #8b949e;">${item.fecha}</span>
-            </div>
-        `;
-        container.appendChild(card);
-    });
-}
-
-function registrarEnHistorial(estado) {
-    if (!currentActiveOrder) return;
-    let colorStatus = "#10b981";
-    if (estado === "Expirada" || estado === "Disputa") colorStatus = "#dc3545";
-
-    orderHistory.unshift({
-        id: currentActiveOrder.id,
-        user: currentActiveOrder.user,
-        net: currentActiveOrder.net || "Polygon",
-        montoCrypto: currentActiveOrder.montoCrypto,
-        montoFiat: currentActiveOrder.montoFiat,
-        rate: currentActiveOrder.tasa,
-        status: estado,
-        color: colorStatus,
-        fecha: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    });
-    renderHistory();
-}
-
-async function initTrade(id) {
-    const oferta = onChainOffers.find(o => o.id === id);
-    if (!oferta) return;
-
-    if (typeof window.ethereum === 'undefined') {
-        showToast("Conecta tu wallet descentralizada primero.", true);
-        return;
-    }
-
-    try {
-        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-        const currentAccount = (accounts[0] || "").toLowerCase();
-
-        const provider = new ethers.providers.Web3Provider(window.ethereum);
-        const contractRead = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
-        const ofertaFresh = await contractRead.ofertas(id);
-
-        if (!ofertaFresh.activa && !ofertaFresh.completada) {
-            showToast("Esta oferta ya no está activa.", true);
-            await cargarOfertasBlockchain();
-            return;
-        }
-
-        if (
-            ofertaFresh.activa &&
-            !ofertaFresh.completada &&
-            currentAccount &&
-            currentAccount !== ofertaFresh.vendedor.toLowerCase() &&
-            ofertaFresh.comprador === ZERO_ADDRESS &&
-            !ofertaFresh.enDisputa
-        ) {
-            const signer = provider.getSigner();
-            const contractWrite = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-            showToast("Registrando toma de orden en el Smart Contract...");
-            const tx = await contractWrite.tomarOferta(id, AMOY_GAS_OVERRIDES);
-            await tx.wait();
-            showToast("¡Orden tomada en blockchain!");
-        }
-
-        const ofertaFinal = await contractRead.ofertas(id);
-        const montoCryptoNum = ofertaFinal.montoCrypto.toNumber();
-        const tasaNum = ofertaFinal.tasa.toNumber();
-        const montoFiatTotal = (montoCryptoNum * tasaNum).toFixed(2);
-
-        currentActiveOrder = {
-            id: ofertaFinal.id.toNumber(),
-            user: `${ofertaFinal.vendedor.substring(0, 6)}...${ofertaFinal.vendedor.substring(ofertaFinal.vendedor.length - 4)}`,
-            vendedorFull: ofertaFinal.vendedor,
-            compradorFull: ofertaFinal.comprador,
-            enDisputa: ofertaFinal.enDisputa,
-            completada: ofertaFinal.completada,
-            net: "Polygon",
-            montoCrypto: montoCryptoNum.toFixed(2),
-            montoFiat: montoFiatTotal,
-            tasa: tasaNum.toFixed(2)
-        };
-
-        abrirOrdenActiva(currentActiveOrder);
-    } catch (err) {
-        console.error(err);
-        if (err.code === 4001) {
-            showToast("Transacción rechazada en la wallet.", true);
-        } else {
-            showToast("No se pudo iniciar/tomar la orden en blockchain.", true);
-        }
-    }
-}
-
-// ==========================================
-// CONTROL DE PESTAÑAS, FILTROS Y MODAL
-// ==========================================
-const tabBuy = document.getElementById('tab-buy');
-const tabSell = document.getElementById('tab-sell');
-let currentTradeType = 'buy';
-
-if (tabBuy && tabSell) {
-    tabBuy.addEventListener('click', () => {
-        tabBuy.classList.add('active');
-        tabSell.classList.remove('active');
-        currentTradeType = 'buy';
-        renderOffers();
-    });
-
-    tabSell.addEventListener('click', () => {
-        tabSell.classList.add('active');
-        tabBuy.classList.remove('active');
-        currentTradeType = 'sell';
-        renderOffers();
-    });
-}
-
-const filterNetwork = document.getElementById('filter-network');
-if (filterNetwork) {
-    filterNetwork.addEventListener('change', renderOffers);
-}
-
-const modal = document.getElementById('modal-order');
-const btnNewOrder = document.getElementById('btn-new-order');
-const btnCancelModal = document.getElementById('btn-cancel-modal');
-
-if (btnNewOrder && modal) {
-    btnNewOrder.addEventListener('click', () => {
-        modal.classList.remove('hidden');
-        const selectOperation = document.getElementById('modal-order-type');
-        if (selectOperation) selectOperation.value = currentTradeType;
-
-        const modalNetwork = document.getElementById('modal-order-network');
-        if (modalNetwork) {
-            if (filterNetwork && filterNetwork.value !== 'all') {
-                modalNetwork.value = filterNetwork.value;
-            } else {
-                modalNetwork.value = 'Polygon';
-            }
-        }
-    });
-}
-
-if (btnCancelModal && modal) {
-    btnCancelModal.addEventListener('click', () => modal.classList.add('hidden'));
-}
-
-// ==========================================
-// FORMULARIO, VALIDACIÓN DE RED Y CONTRATO
-// ==========================================
-const formOrder = document.getElementById('form-order');
-if (formOrder) {
-    formOrder.addEventListener('submit', async (e) => {
-        e.preventDefault();
-
-        const amountInt = parseInt(document.getElementById('modal-order-amount').value, 10);
-        const rateInt = parseInt(document.getElementById('modal-order-rate').value, 10);
-        const networkInput = document.getElementById('modal-order-network').value;
-
-        if (isNaN(amountInt) || amountInt <= 0) {
-            showToast("El monto en USDT debe ser un entero mayor a 0.", true);
-            return;
-        }
-        if (isNaN(rateInt) || rateInt <= 0) {
-            showToast("La tasa de cambio debe ser un entero mayor a 0.", true);
-            return;
-        }
-        if (typeof window.ethereum === 'undefined') {
-            showToast("Por favor instala o desbloquea tu wallet descentralizada.", true);
-            return;
-        }
-
-        if (networkInput !== 'Polygon') {
-            showToast("El contrato está desplegado en Polygon Amoy. Selecciona Polygon.", true);
-            return;
-        }
-
-        try {
-            const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
-            if (currentChainId !== TARGET_CHAIN_ID) {
-                showToast("Cambiando tu wallet a Polygon Amoy Testnet...");
-                await window.ethereum.request({
-                    method: 'wallet_switchEthereumChain',
-                    params: [{ chainId: TARGET_CHAIN_ID }],
-                });
-            }
-
-            const provider = new ethers.providers.Web3Provider(window.ethereum);
-            const signer = provider.getSigner();
-            const escrowContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-
-            showToast("Confirma la garantía en tu wallet...");
-
-            const tx = await escrowContract.crearOferta(amountInt, rateInt, {
-                value: ethers.utils.parseEther("0.001"),
-                ...AMOY_GAS_OVERRIDES
-            });
-
-            showToast("Transacción enviada. Esperando confirmación en Amoy...");
-            await tx.wait();
-
-            await cargarOfertasBlockchain();
-            modal.classList.add('hidden');
-            e.target.reset();
-            showToast("¡Oferta publicada exitosamente en la blockchain!");
-
-        } catch (error) {
-            console.error("Detalle del error:", error);
-            if (error.code === 4001) {
-                showToast("Transacción rechazada en la wallet.", true);
-            } else {
-                showToast("Error en blockchain: verifica saldo POL de prueba o gas.", true);
-            }
-        }
-    });
-}
-
-// ==========================================
-// CONEXIÓN DE WALLET Y CAMBIO DE CUENTA
-// ==========================================
-const btnConnect = document.getElementById('btn-connect');
-
-function actualizarBotonCuenta(account) {
-    if (!btnConnect) return;
-    if (account) {
-        btnConnect.textContent = `${account.substring(0, 6)}...${account.substring(account.length - 4)}`;
-        btnConnect.style.backgroundColor = '#10b981';
-    } else {
-        btnConnect.textContent = 'Conectar Wallet';
-        btnConnect.style.backgroundColor = '';
-    }
-}
-
-async function sincronizarCuentaExistente() {
-    if (typeof window.ethereum === 'undefined') return;
-    try {
-        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-        actualizarBotonCuenta(accounts[0] || null);
-    } catch (err) {
-        console.warn("No se pudo leer cuenta conectada:", err.message);
-    }
-}
-
-if (typeof window.ethereum !== 'undefined' && window.ethereum.on) {
-    window.ethereum.on('accountsChanged', (accounts) => {
-        const nuevaCuenta = accounts && accounts[0] ? accounts[0] : null;
-        actualizarBotonCuenta(nuevaCuenta);
-        if (nuevaCuenta) {
-            showToast(`Cuenta activa actualizada: ${nuevaCuenta.substring(0, 6)}...${nuevaCuenta.substring(nuevaCuenta.length - 4)}`);
-        } else {
-            showToast("Wallet desconectada.");
-        }
-        cargarOfertasBlockchain();
-    });
-}
-
-if (btnConnect) {
-    btnConnect.addEventListener('click', async () => {
-        if (typeof window.ethereum !== 'undefined') {
-            try {
-                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-                const account = accounts[0];
-                const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
-
-                if (currentChainId !== TARGET_CHAIN_ID) {
-                    try {
-                        await window.ethereum.request({
-                            method: 'wallet_switchEthereumChain',
-                            params: [{ chainId: TARGET_CHAIN_ID }],
-                        });
-                    } catch (switchError) {
-                        showToast("Cambia manualmente a Polygon Amoy en tu wallet.", true);
-                        return;
-                    }
-                }
-
-                actualizarBotonCuenta(account);
-                showToast("Wallet descentralizada conectada con éxito.");
-                cargarOfertasBlockchain();
-            } catch (error) {
-                showToast("Conexión rechazada por el usuario.", true);
-            }
-        } else {
-            showToast("No se detectó ninguna Web3 Wallet compatible.", true);
-        }
-    });
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-    sincronizarCuentaExistente();
-    cargarOfertasBlockchain();
-});
-
-// ==========================================
-// ACCIONES DE ORDEN & DISPUTAS
-// ==========================================
-function marcarComoPagado() {
+function volverAlMercado() {
     stopOrderTimer();
-    const statusText = document.getElementById('order-status-text');
-    const statusBanner = document.querySelector('.order-status-banner');
-    const btnMarkPaid = document.getElementById('btn-mark-paid');
+    currentOrderContext = null;
+    if (orderViewSection) orderViewSection.classList.add("hidden");
+    if (tradeTabsSection) tradeTabsSection.classList.remove("hidden");
+    if (filtersSection) filtersSection.classList.remove("hidden");
+    if (offersContainer) offersContainer.classList.remove("hidden");
+    if (historySection) historySection.classList.remove("hidden");
+    cargarOfertasBlockchain();
+}
 
-    if (statusText) statusText.textContent = 'Pago realizado. Esperando confirmación del vendedor...';
-    if (statusBanner) { statusBanner.style.backgroundColor = '#d97706'; }
-    if (btnMarkPaid) { btnMarkPaid.disabled = true; btnMarkPaid.style.opacity = '0.5'; }
-    showToast("Pago notificado al vendedor.");
+async function publicarOferta() {
+    const amountInput = document.getElementById("offer-amount-usdt");
+    const rateInput = document.getElementById("offer-rate-bs");
+    const amountUSDT = parseInt(amountInput?.value || "0", 10);
+    const rateBs = parseInt(rateInput?.value || "0", 10);
+
+    if (!amountUSDT || amountUSDT <= 0 || !rateBs || rateBs <= 0) {
+        showToast("Ingresa montos y tasa enteros mayores que cero.", "warning");
+        return;
+    }
+
+    try {
+        await ensureAmoyNetwork();
+        showToast("Confirma la garantía en tu wallet...", "info");
+        const tx = await contract.createOffer(amountUSDT, rateBs, {
+            ...AMOY_GAS_OVERRIDES,
+            value: ethers.utils.parseEther("0.001")
+        });
+        showToast("Transacción enviada. Esperando confirmación en Amoy...", "info");
+        await tx.wait();
+        showToast("Oferta publicada correctamente.", "success");
+        if (createOfferModal) createOfferModal.classList.add("hidden");
+        await cargarOfertasBlockchain();
+    } catch (err) {
+        console.error("Error al publicar oferta:", err);
+        showToast("Error en blockchain: verifica saldo POL de prueba o gas.", "error");
+    }
+}
+
+async function marcarComoPagado() {
+    if (!currentOrderContext?.offerId) return;
+    try {
+        await ensureAmoyNetwork();
+        const tx = await contract.markPaid(currentOrderContext.offerId, AMOY_GAS_OVERRIDES);
+        showToast("Notificando pago en blockchain...", "info");
+        await tx.wait();
+        const statusText = document.getElementById("order-status-text");
+        if (statusText) statusText.textContent = "Pago marcado como enviado. Esperando liberación del vendedor...";
+        showToast("Pago notificado correctamente.", "success");
+    } catch (err) {
+        console.error("Error en markPaid:", err);
+        showToast("No se pudo marcar como pagado en esta red.", "error");
+    }
 }
 
 async function liberarFondos() {
-    if (!currentActiveOrder) return;
-
-    if (typeof window.ethereum !== 'undefined') {
-        try {
-            const provider = new ethers.providers.Web3Provider(window.ethereum);
-            const signer = provider.getSigner();
-            const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-            const ofertaOnChain = await contract.ofertas(currentActiveOrder.id);
-
-            if (ofertaOnChain.activa && ofertaOnChain.comprador !== ZERO_ADDRESS) {
-                showToast("Ejecutando liberación en Smart Contract (cobrando 1% de comisión)...");
-                const tx = await contract.liberarFondos(currentActiveOrder.id, AMOY_GAS_OVERRIDES);
-                await tx.wait();
-            }
-        } catch (err) {
-            console.error("Error al liberar en contrato:", err);
-            showToast("Verifica que seas vendedor/admin, haya comprador y no esté en disputa.", true);
-            return;
-        }
-    }
-
-    stopOrderTimer();
-    currentActiveOrder.completada = true;
-    const statusText = document.getElementById('order-status-text');
-    const statusBanner = document.querySelector('.order-status-banner');
-
-    if (statusText) statusText.textContent = '¡Orden completada! Fondos liberados y comisión 1% transferida.';
-    if (statusBanner) { statusBanner.style.backgroundColor = '#10b981'; }
-    setOrderButtonsLocked(true, true);
-
-    registrarEnHistorial("Completado");
-    showToast("¡Fondos liberados y comisión cobrada con éxito!");
-}
-
-async function abrirDisputaOrden() {
-    if (!currentActiveOrder) return;
+    if (!currentOrderContext?.offerId) return;
     try {
-        const provider = new ethers.providers.Web3Provider(window.ethereum);
-        const signer = provider.getSigner();
-        const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-
-        showToast("Registrando disputa en el Smart Contract...");
-        const tx = await contract.abrirDisputa(currentActiveOrder.id, AMOY_GAS_OVERRIDES);
+        await ensureAmoyNetwork();
+        const tx = await contract.releaseFunds(currentOrderContext.offerId, AMOY_GAS_OVERRIDES);
+        showToast("Liberando fondos en Amoy...", "info");
         await tx.wait();
 
         stopOrderTimer();
-        currentActiveOrder.enDisputa = true;
-        const statusText = document.getElementById('order-status-text');
-        const statusBanner = document.querySelector('.order-status-banner');
-
-        if (statusText) statusText.textContent = '⚠️ Orden en Disputa Arbitral (Congelada)';
-        if (statusBanner) statusBanner.style.backgroundColor = '#dc3545';
+        setTimerDisplayText("--:--");
+        currentOrderContext.completada = true;
+        const statusText = document.getElementById("order-status-text");
+        const statusBanner = document.querySelector(".order-status-banner");
+        if (statusText) statusText.textContent = "¡Orden completada! Fondos liberados y comisión 1% transferida.";
+        if (statusBanner) { statusBanner.style.backgroundColor = "#10b981"; statusBanner.style.color = "#fff"; }
         setOrderButtonsLocked(true, true);
 
-        registrarEnHistorial("Disputa");
-        showToast("Disputa abierta con éxito. El administrador revisará el caso.");
+        upsertHistoryEntry({
+            ...currentOrderContext,
+            estado: "Completada",
+            fecha: new Date().toLocaleString()
+        });
+        showToast("Fondos liberados con éxito.", "success");
     } catch (err) {
-        console.error(err);
-        showToast("Error al abrir disputa en la blockchain.", true);
+        console.error("Error en releaseFunds:", err);
+        showToast("Error al liberar fondos en blockchain.", "error");
     }
 }
 
-const btnMarkPaid = document.getElementById('btn-mark-paid');
-const btnReleaseFunds = document.getElementById('btn-release-funds');
-const btnDispute = document.getElementById('btn-dispute');
+async function abrirDisputaOrden() {
+    if (!currentOrderContext?.offerId) return;
+    try {
+        await ensureAmoyNetwork();
+        const tx = await contract.openDispute(currentOrderContext.offerId, AMOY_GAS_OVERRIDES);
+        showToast("Abriendo disputa en el contrato...", "warning");
+        await tx.wait();
 
-if (btnMarkPaid) btnMarkPaid.addEventListener('click', marcarComoPagado);
-if (btnReleaseFunds) btnReleaseFunds.addEventListener('click', liberarFondos);
-if (btnDispute) btnDispute.addEventListener('click', abrirDisputaOrden);
+        stopOrderTimer();
+        setTimerDisplayText("--:--");
+        currentOrderContext.enDisputa = true;
+        const statusText = document.getElementById("order-status-text");
+        const statusBanner = document.querySelector(".order-status-banner");
+        if (statusText) statusText.textContent = "⚠️ Orden en Disputa Arbitral (Congelada)";
+        if (statusBanner) { statusBanner.style.backgroundColor = "#dc3545"; statusBanner.style.color = "#fff"; }
+        setOrderButtonsLocked(true, false);
+
+        upsertHistoryEntry({
+            ...currentOrderContext,
+            estado: "En Disputa",
+            fecha: new Date().toLocaleString()
+        });
+        showToast("Disputa abierta y orden congelada.", "warning");
+    } catch (err) {
+        console.error("Error en openDispute:", err);
+        showToast("Error al abrir disputa en blockchain.", "error");
+    }
+}
+
+if (connectWalletBtn) {
+    connectWalletBtn.addEventListener("click", () => conectarWallet(false));
+}
+if (createOfferBtn && createOfferModal) {
+    createOfferBtn.addEventListener("click", () => createOfferModal.classList.remove("hidden"));
+}
+if (cancelOfferBtn && createOfferModal) {
+    cancelOfferBtn.addEventListener("click", () => createOfferModal.classList.add("hidden"));
+}
+if (publishOfferBtn) {
+    publishOfferBtn.addEventListener("click", publicarOferta);
+}
+if (backToMarketBtn) {
+    backToMarketBtn.addEventListener("click", volverAlMercado);
+}
+
+const markPaidBtn = document.getElementById("btn-mark-paid");
+const releaseFundsBtn = document.getElementById("btn-release-funds");
+const disputeBtn = document.getElementById("btn-dispute");
+
+if (markPaidBtn) markPaidBtn.addEventListener("click", marcarComoPagado);
+if (releaseFundsBtn) releaseFundsBtn.addEventListener("click", liberarFondos);
+if (disputeBtn) disputeBtn.addEventListener("click", abrirDisputaOrden);
+
+if (window.ethereum) {
+    window.ethereum.on("accountsChanged", (accounts) => {
+        const nextAccount = accounts && accounts.length > 0 ? accounts[0] : null;
+        syncWalletUI(nextAccount);
+        if (nextAccount) {
+            ensureAmoyNetwork().then(cargarOfertasBlockchain).catch(() => {});
+        }
+    });
+}
+
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+        cargarOfertasBlockchain();
+    }
+});
+
+renderHistory();
+conectarWallet(true).then(() => cargarOfertasBlockchain());
