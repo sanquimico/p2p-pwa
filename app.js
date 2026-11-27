@@ -12,8 +12,9 @@ const AMOY_CHAIN_ID_HEX = "0x13882";
 // Clave en localStorage para conservar el historial de órdenes entre recargas
 const HISTORY_STORAGE_KEY = "p2p_escrow_history_amoy";
 
-// Parámetros de gas sugeridos para transacciones en Amoy (30 gwei prioridad / 35 gwei tope)
+// Parámetros de gas sugeridos para transacciones en Amoy (gasLimit fijo + 30 gwei prioridad / 35 gwei tope)
 const AMOY_GAS_OVERRIDES = {
+    gasLimit: 300000,
     maxPriorityFeePerGas: ethers.utils.parseUnits("30", "gwei"),
     maxFeePerGas: ethers.utils.parseUnits("35", "gwei")
 };
@@ -617,6 +618,23 @@ if (formOrder) {
 }
 if (btnBack) {
     btnBack.addEventListener("click", volverAlMercado);
+}
+
+// Pestañas de filtro Comprar USDT / Vender USDT en la vista principal
+const tabBuy = document.getElementById("tab-buy");
+const tabSell = document.getElementById("tab-sell");
+
+if (tabBuy && tabSell) {
+    tabBuy.addEventListener("click", () => {
+        tabBuy.classList.add("active");
+        tabSell.classList.remove("active");
+        renderOffers();
+    });
+    tabSell.addEventListener("click", () => {
+        tabSell.classList.add("active");
+        tabBuy.classList.remove("active");
+        renderOffers();
+    });
 }
 
 const markPaidBtn = document.getElementById("btn-mark-paid");
